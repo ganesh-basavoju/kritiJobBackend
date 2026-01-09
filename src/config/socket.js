@@ -4,7 +4,7 @@ module.exports = {
   init: (httpServer) => {
     io = require('socket.io')(httpServer, {
       cors: {
-        origin: process.env.CLIENT_URL || "http://localhost:5173",
+        origin: [process.env.CLIENT_URL || "http://localhost:5173", "https://kriti-job-portal.vercel.app"],
         methods: ["GET", "POST"]
       }
     });
