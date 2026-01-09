@@ -10,7 +10,7 @@ const app = express();
 
 // Middlewares
 app.use(helmet());
-app.use(cors({ origin: [process.env.CLIENT_URL || "http://localhost:5173", "https://kriti-job-portal.vercel.app"], credentials: true }));
+app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
