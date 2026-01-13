@@ -13,6 +13,7 @@ const notificationRoutes = require('../modules/notifications/notifications.route
 // const adminRoutes = require('../modules/admin/admin.routes');
 const reportRoutes = require('../modules/reports/reports.routes');
 const contentRoutes = require('../modules/content/content.routes');
+const employerRoutes = require('../modules/employer/employer.routes');
 
 // Mount Routes
 router.use('/auth', authRoutes);
@@ -26,5 +27,6 @@ router.use('/notifications', notificationRoutes);
 // router.use('/admin', adminRoutes);
 router.use('/reports', reportRoutes);
 router.use('/content', contentRoutes);
+router.use('/employer', employerRoutes);
 
 module.exports = router;

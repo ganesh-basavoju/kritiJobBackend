@@ -97,3 +97,37 @@ exports.sendMessage = async (req, res, next) => {
     next(error);
   }
 };
+// @desc    Initiate or Get Conversation Details
+// @route   POST /api/chat
+// @access  Private
+exports.initiateChat = async (req, res, next) => {
+  try {
+    const { userId } = req.body; // The other user's ID
+
+    if (!userId) {
+        return res.status(400).json({ success: false, message: 'User ID is required' });
+    }
+
+    const otherUser = await User.findById(userId);
+    if (!otherUser) {
+        return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    // Deterministic Conversation ID
+    const conversationId = [req.user.id, userId].sort().join('_');
+
+    res.status(200).json({
+      success: true,
+      data: {
+          _id: conversationId,
+          otherUser: {
+              _id: otherUser._id,
+              name: otherUser.name,
+              avatarUrl: otherUser.avatarUrl // If exists
+          }
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
