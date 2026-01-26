@@ -60,6 +60,10 @@ const jobSchema = new mongoose.Schema({
     type: Date,
     default: Date.now,
     index: true
+  },
+  deadline: {
+    type: Date,
+    index: true
   }
 }, {
   timestamps: true

@@ -1,5 +1,69 @@
 const User = require('../../models/User');
 const CandidateProfile = require('../../models/CandidateProfile');
+const Job = require('../../models/Job');
+const Application = require('../../models/Application');
+
+// @desc    Get Employer Statistics
+// @route   GET /api/employer/stats
+// @access  Private (Employer)
+exports.getEmployerStats = async (req, res, next) => {
+  try {
+    const employerId = req.user.id;
+
+    // Get active jobs count
+    const activeJobs = await Job.countDocuments({ 
+      employerId, 
+      status: 'Open' 
+    });
+
+    // Get all jobs for this employer
+    const jobs = await Job.find({ employerId }).select('_id deadline');
+    const jobIds = jobs.map(job => job._id);
+
+    // Get total applications count
+    const totalApplications = await Application.countDocuments({ 
+      jobId: { $in: jobIds } 
+    });
+
+    // Get new applications (last 24 hours)
+    const oneDayAgo = new Date();
+    oneDayAgo.setHours(oneDayAgo.getHours() - 24);
+    
+    const newApplications = await Application.countDocuments({
+      jobId: { $in: jobIds },
+      createdAt: { $gte: oneDayAgo }
+    });
+
+    // Get jobs expiring soon (next 2 days)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const twoDaysFromNow = new Date(today);
+    twoDaysFromNow.setDate(twoDaysFromNow.getDate() + 2);
+    twoDaysFromNow.setHours(23, 59, 59, 999);
+
+    const jobsExpiringSoon = await Job.countDocuments({
+      employerId,
+      status: 'Open',
+      deadline: { 
+        $gte: today,
+        $lte: twoDaysFromNow 
+      }
+    });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        activeJobs,
+        totalApplications,
+        newApplications,
+        jobsExpiringSoon
+      }
+    });
+
+  } catch (error) {
+    next(error);
+  }
+};
 
 // @desc    Search Candidates
 // @route   GET /api/employer/candidates
