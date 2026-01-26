@@ -8,6 +8,7 @@ const User = require('../../models/User');
 exports.getProfile = async (req, res, next) => {
   try {
     let profile = await CandidateProfile.findOne({ userId: req.user.id })
+      .populate('userId', 'name email avatarUrl phone')
       .populate('savedJobs', 'title companyId location type salaryRange postedAt')
       .populate({
         path: 'savedJobs',
@@ -21,9 +22,18 @@ exports.getProfile = async (req, res, next) => {
       return res.status(200).json({ success: true, data: null });
     }
 
+    // Merge user data into profile response for convenience
+    const profileData = profile.toObject();
+    if (profile.userId) {
+      profileData.avatarUrl = profile.userId.avatarUrl || profile.avatarUrl;
+      profileData.name = profile.userId.name;
+      profileData.email = profile.userId.email;
+      profileData.phone = profile.phone || profile.userId.phone;
+    }
+
     res.status(200).json({
       success: true,
-      data: profile
+      data: profileData
     });
   } catch (error) {
     next(error);
@@ -129,17 +139,15 @@ exports.uploadAvatar = async (req, res, next) => {
         const { uploadToCloudinary } = require('../../services/upload.service');
         const result = await uploadToCloudinary(req.file.buffer, 'avatars');
 
-        // Update User model as avatarUrl is ideally on User (for global access)
-        // Also checks if CandidateProfile needs it. 
-        // Based on previous code, CandidateProfile.jsx reads from profile? 
-        // But usually avatar is on User. Let's update User.
-        
+        // Update both User and CandidateProfile with the new avatar URL
         await User.findByIdAndUpdate(req.user.id, { avatarUrl: result.secure_url });
         
-        // Also update CandidateProfile if it has an avatar field to stay in sync, 
-        // or just rely on User. But typically profile page might look at profile doc.
-        // Let's check Schema... if CandidateProfile has no avatar field, we just update User.
-        // Assuming User model has it.
+        // Update or create CandidateProfile with avatar
+        await CandidateProfile.findOneAndUpdate(
+            { userId: req.user.id },
+            { avatarUrl: result.secure_url },
+            { upsert: true }
+        );
         
         res.status(200).json({
             success: true,
@@ -150,14 +158,24 @@ exports.uploadAvatar = async (req, res, next) => {
     }
 };
 
-// @desc    Get Saved Jobs
+// @desc    Get Saved Jobs (Only Open jobs, not applied by user)
 // @route   GET /api/candidate/saved-jobs
 // @access  Private (Candidate)
 exports.getSavedJobs = async (req, res, next) => {
     try {
+        const Application = require('../../models/Application');
+        
+        // Get all job IDs user has applied to
+        const appliedJobIds = await Application.find({ candidateId: req.user.id })
+            .distinct('jobId');
+
         const profile = await CandidateProfile.findOne({ userId: req.user.id })
             .populate({
                 path: 'savedJobs',
+                match: { 
+                    status: 'Open',
+                    _id: { $nin: appliedJobIds }
+                },
                 populate: { path: 'companyId', select: 'name logoUrl location' }
             });
 
@@ -165,10 +183,13 @@ exports.getSavedJobs = async (req, res, next) => {
              return res.status(200).json({ success: true, data: [] });
         }
 
+        // Filter out null entries (jobs that didn't match the criteria)
+        const filteredJobs = profile.savedJobs.filter(job => job !== null);
+
         res.status(200).json({
             success: true,
-            count: profile.savedJobs.length,
-            data: profile.savedJobs
+            count: filteredJobs.length,
+            data: filteredJobs
         });
     } catch (error) {
         next(error);

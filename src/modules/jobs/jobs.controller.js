@@ -1,13 +1,64 @@
 const Job = require('../../models/Job');
 const Company = require('../../models/Company');
+const Application = require('../../models/Application');
 const APIFeatures = require('../../utils/apiFeatures');
 
-// @desc    Get all jobs
+// @desc    Get job feed (Open jobs, not applied by current user)
+// @route   GET /api/jobs/feed
+// @access  Private (Candidate)
+exports.getJobFeed = async (req, res, next) => {
+  try {
+    // Get all job IDs user has applied to
+    const appliedJobIds = await Application.find({ candidateId: req.user.id })
+      .distinct('jobId');
+
+    // Build base query for Open jobs that user hasn't applied to
+    const baseFilter = {
+      status: 'Open',
+      _id: { $nin: appliedJobIds }
+    };
+
+    // Get total count for pagination
+    const total = await Job.countDocuments(baseFilter);
+
+    // Build query with features
+    const baseQuery = Job.find(baseFilter)
+      .populate('companyId', 'name logoUrl location')
+      .populate('applicationsCount');
+
+    const features = new APIFeatures(baseQuery, req.query)
+      .search()
+      .filter()
+      .sort()
+      .limitFields()
+      .paginate();
+
+    const jobs = await features.query;
+
+    // Calculate pagination
+    const page = req.query.page * 1 || 1;
+    const limit = req.query.limit * 1 || 20;
+    const totalPages = Math.ceil(total / limit);
+
+    res.status(200).json({
+      success: true,
+      count: jobs.length,
+      data: jobs,
+      page,
+      totalPages,
+      total
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get all jobs (Public - for browsing without login)
 // @route   GET /api/jobs
 // @access  Public
 exports.getJobs = async (req, res, next) => {
   try {
-    const features = new APIFeatures(Job.find().populate('companyId', 'name logoUrl location'), req.query)
+    const features = new APIFeatures(Job.find().populate('companyId', 'name logoUrl location').populate('applicationsCount'), req.query)
       .search()
       .filter()
       .sort()
@@ -31,7 +82,9 @@ exports.getJobs = async (req, res, next) => {
 // @access  Public
 exports.getJob = async (req, res, next) => {
   try {
-    const job = await Job.findById(req.params.id).populate('companyId');
+    const job = await Job.findById(req.params.id)
+      .populate('companyId')
+      .populate('applicationsCount');
 
     if (!job) {
       return res.status(404).json({ success: false, message: 'Job not found' });
