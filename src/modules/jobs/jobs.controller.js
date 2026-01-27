@@ -2,6 +2,7 @@ const Job = require('../../models/Job');
 const Company = require('../../models/Company');
 const Application = require('../../models/Application');
 const APIFeatures = require('../../utils/apiFeatures');
+const notificationService = require('../../services/notification.service');
 
 // @desc    Get job feed (Open jobs, not applied by current user)
 // @route   GET /api/jobs/feed
@@ -122,6 +123,16 @@ exports.createJob = async (req, res, next) => {
     }
 
     const job = await Job.create(req.body);
+
+    // Populate company data for notification
+    await job.populate('companyId', 'name logoUrl location');
+
+    // Send push notification to candidates (async, don't wait)
+    if (job.status === 'Open') {
+      notificationService.sendNewJobAlert(job).catch(err => {
+        console.error('Failed to send job alert notification:', err.message);
+      });
+    }
 
     res.status(201).json({
       success: true,

@@ -1,6 +1,7 @@
 const Application = require('../../models/Application');
 const Job = require('../../models/Job');
 const User = require('../../models/User');
+const notificationService = require('../../services/notification.service');
 
 // @desc    Apply for a job
 // @route   POST /api/applications
@@ -42,6 +43,12 @@ exports.applyForJob = async (req, res, next) => {
       { userId: req.user.id },
       { $pull: { savedJobs: jobId } }
     );
+
+    // Send push notification to employer (async, don't wait)
+    const candidate = await User.findById(req.user.id).select('name email');
+    notificationService.sendNewApplicantAlert(application, job, candidate).catch(err => {
+      console.error('Failed to send new applicant notification:', err.message);
+    });
 
     res.status(201).json({
       success: true,
@@ -192,8 +199,16 @@ exports.updateApplicationStatus = async (req, res, next) => {
       return res.status(403).json({ success: false, message: 'Not authorized' });
     }
 
+    const previousStatus = application.status;
     application.status = status;
     await application.save();
+
+    // Send push notification to candidate (async, don't wait)
+    if (previousStatus !== status) {
+      notificationService.sendApplicationStatusUpdate(application, previousStatus).catch(err => {
+        console.error('Failed to send application status notification:', err.message);
+      });
+    }
 
     res.status(200).json({
       success: true,

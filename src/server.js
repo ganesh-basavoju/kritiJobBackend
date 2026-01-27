@@ -20,10 +20,19 @@ const logger = require('./config/logger');
 const app = require('./app');
 const runCronJobs = require('./cron/cleanup.job');
 const chatHandler = require('./sockets/chat.handler');
-const notificationHandler = require('./sockets/notification.handler');
+const { initializeFirebase } = require('./config/firebase');
 
 // Connect to Database
 connectDB();
+
+// Initialize Firebase Admin SDK for push notifications
+try {
+  initializeFirebase();
+  logger.info('Firebase Admin SDK ready for push notifications');
+} catch (error) {
+  logger.error(`Firebase initialization failed: ${error.message}`);
+  logger.warn('Push notifications will not be available');
+}
 
 // Init Cron
 runCronJobs();
@@ -40,7 +49,9 @@ io.on('connection', (socket) => {
   // Load socket handlers
   try {
       chatHandler(io, socket);
-      notificationHandler(io, socket);
+      // notificationHandler is for Socket.IO real-time events, not FCM push
+      // If you have a socket notification handler, uncomment it
+      // notificationHandler(io, socket);
   } catch (err) {
       logger.error(`Socket Handler Error: ${err.message}`);
   }
