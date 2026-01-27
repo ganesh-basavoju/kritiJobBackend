@@ -11,8 +11,25 @@ const app = express();
 // Middlewares
 app.use(helmet());
 app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+
+// Skip body parsing entirely for multipart/form-data (handled by multer)
+app.use((req, res, next) => {
+  const contentType = req.headers['content-type'] || '';
+  if (contentType.startsWith('multipart/form-data')) {
+    console.log('Skipping body parsing for multipart request');
+    return next();
+  }
+  express.json()(req, res, next);
+});
+
+app.use((req, res, next) => {
+  const contentType = req.headers['content-type'] || '';
+  if (contentType.startsWith('multipart/form-data')) {
+    return next();
+  }
+  express.urlencoded({ extended: true })(req, res, next);
+});
+
 app.use(morgan('dev'));
 
 // Static folder for local uploads (if needed)

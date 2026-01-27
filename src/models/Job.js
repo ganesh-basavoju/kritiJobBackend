@@ -66,7 +66,17 @@ const jobSchema = new mongoose.Schema({
     index: true
   }
 }, {
-  timestamps: true
+  timestamps: true,
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true }
+});
+
+// Virtual for applications count
+jobSchema.virtual('applicationsCount', {
+  ref: 'Application',
+  localField: '_id',
+  foreignField: 'jobId',
+  count: true
 });
 
 // Indexes

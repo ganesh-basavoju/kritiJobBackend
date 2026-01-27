@@ -1,6 +1,7 @@
 const Application = require('../../models/Application');
 const Job = require('../../models/Job');
 const User = require('../../models/User');
+const notificationService = require('../../services/notification.service');
 
 // @desc    Apply for a job
 // @route   POST /api/applications
@@ -36,9 +37,42 @@ exports.applyForJob = async (req, res, next) => {
       resumeUrl
     });
 
+    // Remove job from savedJobs if it was saved
+    const CandidateProfile = require('../../models/CandidateProfile');
+    await CandidateProfile.findOneAndUpdate(
+      { userId: req.user.id },
+      { $pull: { savedJobs: jobId } }
+    );
+
+    // Send push notification to employer (async, don't wait)
+    const candidate = await User.findById(req.user.id).select('name email');
+    notificationService.sendNewApplicantAlert(application, job, candidate).catch(err => {
+      console.error('Failed to send new applicant notification:', err.message);
+    });
+
     res.status(201).json({
       success: true,
       data: application
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Check if user has applied to a specific job
+// @route   GET /api/applications/check/:jobId
+// @access  Private (Candidate)
+exports.checkApplicationStatus = async (req, res, next) => {
+  try {
+    const application = await Application.findOne({
+      jobId: req.params.jobId,
+      candidateId: req.user.id
+    });
+
+    res.status(200).json({
+      success: true,
+      applied: !!application,
+      application: application || null
     });
   } catch (error) {
     next(error);
@@ -50,20 +84,35 @@ exports.applyForJob = async (req, res, next) => {
 // @access  Private (Candidate)
 exports.getMyApplications = async (req, res, next) => {
   try {
+    // Get total count
+    const total = await Application.countDocuments({ candidateId: req.user.id });
+
+    // Pagination
+    const page = req.query.page * 1 || 1;
+    const limit = req.query.limit * 1 || 20;
+    const skip = (page - 1) * limit;
+    const totalPages = Math.ceil(total / limit);
+
     const applications = await Application.find({ candidateId: req.user.id })
       .populate({
         path: 'jobId',
-        select: 'title companyId location type salaryRange postedAt',
+        select: 'title companyId location type salaryRange experienceLevel skillsRequired deadline status postedAt',
         populate: {
           path: 'companyId',
-          select: 'name logoUrl'
+          select: 'name logoUrl location'
         }
-      });
+      })
+      .sort('-createdAt')
+      .skip(skip)
+      .limit(limit);
 
     res.status(200).json({
       success: true,
       count: applications.length,
-      data: applications
+      data: applications,
+      page,
+      totalPages,
+      total
     });
   } catch (error) {
     next(error);
@@ -150,8 +199,16 @@ exports.updateApplicationStatus = async (req, res, next) => {
       return res.status(403).json({ success: false, message: 'Not authorized' });
     }
 
+    const previousStatus = application.status;
     application.status = status;
     await application.save();
+
+    // Send push notification to candidate (async, don't wait)
+    if (previousStatus !== status) {
+      notificationService.sendApplicationStatusUpdate(application, previousStatus).catch(err => {
+        console.error('Failed to send application status notification:', err.message);
+      });
+    }
 
     res.status(200).json({
       success: true,

@@ -1,5 +1,5 @@
 const express = require('express');
-const { applyForJob, getMyApplications, getJobApplications, updateApplicationStatus } = require('./applications.controller');
+const { applyForJob, getMyApplications, getJobApplications, updateApplicationStatus, checkApplicationStatus } = require('./applications.controller');
 const { protect } = require('../../middlewares/auth.middleware');
 const { authorize } = require('../../middlewares/rbac.middleware');
 
@@ -9,6 +9,7 @@ router.use(protect);
 
 router.post('/', authorize('candidate'), applyForJob);
 router.get('/my-applications', authorize('candidate'), getMyApplications);
+router.get('/check/:jobId', authorize('candidate'), checkApplicationStatus);
 
 // Employer Routes
 router.get('/employer/all', authorize('employer', 'admin'), require('./applications.controller').getCompanyApplications);
