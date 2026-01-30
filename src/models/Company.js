@@ -18,7 +18,7 @@ const companySchema = new mongoose.Schema({
   description: {
     type: String,
     required: [true, 'Please add a description'],
-    maxlength: [1000, 'Description limited to 1000 chars']
+    maxlength: [10000, 'Description limited to 10000 chars']
   },
   logoUrl: {
     type: String,

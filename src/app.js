@@ -19,7 +19,7 @@ app.use((req, res, next) => {
     console.log('Skipping body parsing for multipart request');
     return next();
   }
-  express.json()(req, res, next);
+  express.json({ limit: '50mb' })(req, res, next);
 });
 
 app.use((req, res, next) => {
@@ -27,7 +27,7 @@ app.use((req, res, next) => {
   if (contentType.startsWith('multipart/form-data')) {
     return next();
   }
-  express.urlencoded({ extended: true })(req, res, next);
+  express.urlencoded({ extended: true, limit: '50mb' })(req, res, next);
 });
 
 app.use(morgan('dev'));

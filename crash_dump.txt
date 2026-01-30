@@ -1,0 +1,17 @@
+Uncaught Exception: Error: Cannot find module '../models/Notification'
+Require stack:
+- C:\Users\ganes\OneDrive\Desktop\KritiJobPortal\server\src\modules\notifications\notifications.controller.js
+- C:\Users\ganes\OneDrive\Desktop\KritiJobPortal\server\src\modules\notifications\notifications.routes.js
+- C:\Users\ganes\OneDrive\Desktop\KritiJobPortal\server\src\routes\index.js
+- C:\Users\ganes\OneDrive\Desktop\KritiJobPortal\server\src\app.js
+- C:\Users\ganes\OneDrive\Desktop\KritiJobPortal\server\src\server.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1365:15)
+    at defaultResolveImpl (node:internal/modules/cjs/loader:1021:19)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1026:22)
+    at Function._load (node:internal/modules/cjs/loader:1175:37)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
+    at Module.require (node:internal/modules/cjs/loader:1445:12)
+    at require (node:internal/modules/helpers:135:16)
+    at Object.<anonymous> (C:\Users\ganes\OneDrive\Desktop\KritiJobPortal\server\src\modules\notifications\notifications.controller.js:1:22)
+    at Module._compile (node:internal/modules/cjs/loader:1688:14)

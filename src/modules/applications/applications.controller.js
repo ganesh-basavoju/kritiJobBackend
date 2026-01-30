@@ -2,6 +2,7 @@ const Application = require('../../models/Application');
 const Job = require('../../models/Job');
 const User = require('../../models/User');
 const notificationService = require('../../services/notification.service');
+const sendEmail = require('../../services/email.service');
 
 // @desc    Apply for a job
 // @route   POST /api/applications
@@ -17,7 +18,13 @@ exports.applyForJob = async (req, res, next) => {
     }
 
     if (job.status !== 'Open') {
-      return res.status(400).json({ success: false, message: 'Job is not open for applications' });
+      return res.status(400).json({ success: false, message: 'Applications for this job are closed' });
+    }
+
+    // Check Deadline (Strict)
+    const now = new Date();
+    if (job.applicationDeadline && new Date(job.applicationDeadline) < now) {
+         return res.status(400).json({ success: false, message: 'Applications for this job are closed (Deadline passed)' });
     }
 
     // Check if already applied
@@ -44,10 +51,26 @@ exports.applyForJob = async (req, res, next) => {
       { $pull: { savedJobs: jobId } }
     );
 
-    // Send push notification to employer (async, don't wait)
-    const candidate = await User.findById(req.user.id).select('name email');
-    notificationService.sendNewApplicantAlert(application, job, candidate).catch(err => {
-      console.error('Failed to send new applicant notification:', err.message);
+    // Send notification to employer
+    const candidate = await User.findById(req.user.id).select('name');
+    await notificationService.send({
+        recipientId: job.employerId,
+        type: 'APPLICATION_RECEIVED',
+        title: 'New Job Application',
+        message: `${candidate.name} applied for ${job.title}`,
+        entityType: 'application',
+        entityId: application._id,
+        data: { jobId: job._id }
+    });
+
+    // Notify Admin
+    await notificationService.sendToAdmin({
+        type: 'NEW_APPLICATION',
+        title: 'New Job Application',
+        message: `New application for ${job.title} from ${candidate.name}`,
+        entityType: 'application',
+        entityId: application._id,
+        data: { jobId: job._id }
     });
 
     res.status(201).json({
@@ -203,11 +226,20 @@ exports.updateApplicationStatus = async (req, res, next) => {
     application.status = status;
     await application.save();
 
-    // Send push notification to candidate (async, don't wait)
+    // Send notification to candidate
     if (previousStatus !== status) {
-      notificationService.sendApplicationStatusUpdate(application, previousStatus).catch(err => {
-        console.error('Failed to send application status notification:', err.message);
-      });
+        // Fetch job title for message
+        const job = await Job.findById(application.jobId).select('title');
+        
+        await notificationService.send({
+            recipientId: application.candidateId,
+            type: 'APPLICATION_STATUS_UPDATE',
+            title: 'Application Update',
+            message: `Your application for ${job.title} is now ${status}`,
+            entityType: 'application',
+            entityId: application._id,
+            data: { status }
+        });
     }
 
     res.status(200).json({
@@ -217,4 +249,42 @@ exports.updateApplicationStatus = async (req, res, next) => {
   } catch (error) {
     next(error);
   }
+};
+
+// @desc    Message a candidate
+// @route   POST /api/applications/message
+// @access  Private (Employer)
+exports.messageCandidate = async (req, res, next) => {
+    try {
+        const { applicationId, message, subject } = req.body;
+
+        const application = await Application.findById(applicationId)
+            .populate('candidateId', 'email name')
+            .populate('jobId', 'title');
+
+        if (!application) {
+            return res.status(404).json({ success: false, message: 'Application not found' });
+        }
+
+        // Check ownership
+        if (application.employerId.toString() !== req.user.id && req.user.role !== 'admin') {
+             return res.status(403).json({ success: false, message: 'Not authorized' });
+        }
+
+        const candidateEmail = application.candidateId.email;
+        const jobTitle = application.jobId.title;
+        const emailSubject = subject || `Message regarding your application for ${jobTitle}`;
+        
+        const emailMessage = `Hello ${application.candidateId.name},\n\nYou have received a message from the employer regarding your application for ${jobTitle}.\n\nMessage:\n${message}\n\nBest regards,\nKriti Job Portal Team`;
+
+        await sendEmail({
+            email: candidateEmail,
+            subject: emailSubject,
+            message: emailMessage
+        });
+
+        res.status(200).json({ success: true, data: 'Email sent successfully' });
+    } catch (error) {
+        next(error);
+    }
 };

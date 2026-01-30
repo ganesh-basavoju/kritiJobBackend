@@ -19,4 +19,7 @@ router.get('/job/:jobId', authorize('employer', 'admin'), getJobApplications);
 
 router.put('/:id/status', authorize('employer', 'admin'), updateApplicationStatus);
 
+// Message Candidate
+router.post('/message', authorize('employer', 'admin'), require('./applications.controller').messageCandidate);
+
 module.exports = router;
