@@ -3,6 +3,9 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const path = require('path');
+// Load env vars
+const dotenv = require('dotenv');
+dotenv.config({ path: path.join(__dirname, '../.env') });
 const routes = require('./routes');
 const { errorHandler } = require('./middlewares/errorHandler.middleware');
 
