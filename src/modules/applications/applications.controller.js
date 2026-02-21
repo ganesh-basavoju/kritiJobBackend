@@ -1,7 +1,10 @@
 const Application = require('../../models/Application');
 const Job = require('../../models/Job');
 const User = require('../../models/User');
+const CandidateProfile = require('../../models/CandidateProfile');
 const notificationService = require('../../services/notification.service');
+
+const MAX_FREE_APPLICATIONS_PER_MONTH = 10;
 
 // @desc    Apply for a job
 // @route   POST /api/applications
@@ -30,15 +33,43 @@ exports.applyForJob = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'You have already applied to this job' });
     }
 
+    // Get candidate profile
+    const candidateProfile = await CandidateProfile.findOne({ userId: req.user.id });
+    
+    if (!candidateProfile) {
+      return res.status(404).json({ success: false, message: 'Candidate profile not found' });
+    }
+
+    // Check if candidate has active premium subscription
+    const isPremium = candidateProfile.hasActivePremium();
+    
+    // For non-premium users, check monthly application limit
+    if (!isPremium) {
+      const currentMonthApplications = candidateProfile.getCurrentMonthApplicationCount();
+      
+      if (currentMonthApplications >= MAX_FREE_APPLICATIONS_PER_MONTH) {
+        return res.status(403).json({
+          success: false,
+          message: 'You have reached your monthly application limit. Upgrade to premium for unlimited applications.',
+          limit: MAX_FREE_APPLICATIONS_PER_MONTH,
+          current: currentMonthApplications,
+          requiresPremium: true
+        });
+      }
+    }
+
     const application = await Application.create({
       jobId,
       candidateId: req.user.id,
       employerId: job.employerId,
-      resumeUrl
+      resumeUrl,
+      isPremiumApplication: isPremium
     });
 
+    // Increment application count
+    await candidateProfile.incrementApplicationCount();
+
     // Remove job from savedJobs if it was saved
-    const CandidateProfile = require('../../models/CandidateProfile');
     await CandidateProfile.findOneAndUpdate(
       { userId: req.user.id },
       { $pull: { savedJobs: jobId } }
@@ -52,7 +83,8 @@ exports.applyForJob = async (req, res, next) => {
 
     res.status(201).json({
       success: true,
-      data: application
+      data: application,
+      remainingApplications: isPremium ? 'unlimited' : MAX_FREE_APPLICATIONS_PER_MONTH - (candidateProfile.getCurrentMonthApplicationCount())
     });
   } catch (error) {
     next(error);
@@ -142,9 +174,10 @@ exports.getJobApplications = async (req, res, next) => {
       return res.status(403).json({ success: false, message: 'Not authorized' });
     }
 
+    // Get applications sorted by premium status (premium first) then by creation date
     const applications = await Application.find({ jobId: req.params.jobId })
-      .populate('candidateId', 'name email avatarUrl'); 
-      // In real app, might want to populate CandidateProfile logic to get title/skills too.
+      .populate('candidateId', 'name email avatarUrl')
+      .sort({ isPremiumApplication: -1, createdAt: 1 }); // Premium first, then oldest first
 
     res.status(200).json({
       success: true,
@@ -169,7 +202,7 @@ exports.getCompanyApplications = async (req, res, next) => {
     const applications = await Application.find({ jobId: { $in: jobIds } })
       .populate('jobId', 'title') // Populate Job Title
       .populate('candidateId', 'name email avatarUrl') // Populate Candidate
-      .sort({ createdAt: -1 });
+      .sort({ isPremiumApplication: -1, createdAt: -1 }); // Premium first, then newest first
 
     res.status(200).json({
       success: true,
