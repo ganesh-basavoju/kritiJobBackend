@@ -1,6 +1,7 @@
 const cron = require('node-cron');
 const Job = require('../models/Job');
 const logger = require('../config/logger');
+const { checkExpiredSubscriptions } = require('./subscription-expiry.job');
 
 const runCronJobs = () => {
     // Run every day at midnight
@@ -27,6 +28,16 @@ const runCronJobs = () => {
     cron.schedule('0 0 * * 0', () => {
         logger.info('Running cron job: System cleanup');
         // Logic to archive logs or old notifications
+    });
+
+    // Run every day at 2 AM to check expired subscriptions
+    cron.schedule('0 2 * * *', async () => {
+        logger.info('Running cron job: Check expired subscriptions');
+        try {
+            await checkExpiredSubscriptions();
+        } catch (err) {
+            logger.error(`Subscription expiry cron error: ${err.message}`);
+        }
     });
 };
 

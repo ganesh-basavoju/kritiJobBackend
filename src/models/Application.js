@@ -26,6 +26,12 @@ const applicationSchema = new mongoose.Schema({
     enum: ['Applied', 'Reviewing', 'Interviewing', 'Selected', 'Rejected'],
     default: 'Applied',
     index: true
+  },
+  // Track if applicant was premium at time of application (for ranking)
+  isPremiumApplication: {
+    type: Boolean,
+    default: false,
+    index: true
   }
 }, {
   timestamps: true
