@@ -4,11 +4,16 @@ const Subscription = require('../../models/Subscription');
 const CandidateProfile = require('../../models/CandidateProfile');
 const User = require('../../models/User');
 
-// Initialize Razorpay instance
-const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET
-});
+// Initialize Razorpay instance conditionally to avoid crashes if keys are missing
+let razorpay;
+if (process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET) {
+  razorpay = new Razorpay({
+    key_id: process.env.RAZORPAY_KEY_ID,
+    key_secret: process.env.RAZORPAY_KEY_SECRET
+  });
+} else {
+  console.warn('WARNING: Razorpay keys are missing from .env (RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET). Subscription feature will fail.');
+}
 
 // Subscription pricing (in paise for INR, e.g., 29900 = ₹299)
 const SUBSCRIPTION_PLANS = {
@@ -59,6 +64,14 @@ exports.createSubscriptionOrder = async (req, res, next) => {
         duration: plan.duration
       }
     };
+
+    // Create Razorpay order
+    if (!razorpay) {
+      return res.status(500).json({
+        success: false,
+        message: 'Payment gateway is not currently configured on the server.'
+      });
+    }
 
     const order = await razorpay.orders.create(options);
 
