@@ -1,5 +1,5 @@
 const express = require('express');
-const { getJobs, getJob, createJob, updateJob, deleteJob, getMyJobs, searchJobs, getJobFeed } = require('./jobs.controller');
+const { getJobs, getJob, createJob, updateJob, deleteJob, getMyJobs, searchJobs, getJobFeed, toggleJobVisibility } = require('./jobs.controller');
 const { protect } = require('../../middlewares/auth.middleware');
 const { authorize } = require('../../middlewares/rbac.middleware');
 
@@ -15,6 +15,7 @@ router.use(protect);
 
 router.post('/', authorize('employer', 'admin'), createJob);
 router.put('/:id', authorize('employer', 'admin'), updateJob);
+router.put('/:id/toggle-visibility', authorize('employer', 'admin'), toggleJobVisibility);
 router.delete('/:id', authorize('employer', 'admin'), deleteJob);
 
 module.exports = router;

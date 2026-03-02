@@ -58,6 +58,11 @@ const jobSchema = new mongoose.Schema({
     required: true,
     index: true
   },
+  isActive: {
+    type: Boolean,
+    default: true,
+    index: true
+  },
   status: {
     type: String,
     enum: ['Open', 'Closed', 'Draft', 'Archived'],

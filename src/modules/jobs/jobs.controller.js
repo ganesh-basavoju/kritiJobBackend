@@ -14,11 +14,11 @@ exports.getJobFeed = async (req, res, next) => {
     const appliedJobIds = await Application.find({ candidateId: req.user.id })
       .distinct('jobId');
 
-    // Build base query for Open jobs that user hasn't applied to AND are not expired
+    // Build base query for Open jobs that user hasn't applied to AND are active
     const baseFilter = {
       status: 'Open',
-      _id: { $nin: appliedJobIds },
-      applicationDeadline: { $gte: new Date() } // Filter expired jobs
+      isActive: true, // Only show active jobs
+      _id: { $nin: appliedJobIds }
     };
 
     // Build query with features
@@ -63,10 +63,10 @@ exports.getJobFeed = async (req, res, next) => {
 // @access  Public
 exports.getJobs = async (req, res, next) => {
   try {
-    // Filter out expired jobs for public browsing
+    // Filter out inactive jobs for public browsing
     const initialQuery = Job.find({ 
         status: 'Open',
-        applicationDeadline: { $gte: new Date() } 
+        isActive: true
     }).populate('companyId', 'name logoUrl location').populate('applicationsCount');
 
     const features = new APIFeatures(initialQuery, req.query)
@@ -299,6 +299,34 @@ exports.getMyJobs = async (req, res, next) => {
             success: true,
             count: jobs.length,
             data: jobs
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// @desc    Toggle job visibility
+// @route   PUT /api/jobs/:id/toggle-visibility
+// @access  Private (Employer)
+exports.toggleJobVisibility = async (req, res, next) => {
+    try {
+        const job = await Job.findById(req.params.id);
+
+        if (!job) {
+            return res.status(404).json({ success: false, message: 'Job not found' });
+        }
+
+        // Verify employer owns this job
+        if (job.employerId.toString() !== req.user.id && req.user.role !== 'admin') {
+            return res.status(403).json({ success: false, message: 'Not authorized to toggle this job' });
+        }
+
+        job.isActive = !job.isActive;
+        await job.save();
+
+        res.status(200).json({
+            success: true,
+            data: job
         });
     } catch (error) {
         next(error);
