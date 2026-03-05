@@ -48,7 +48,7 @@ exports.applyForJob = async (req, res, next) => {
     }
 
     // Check if candidate has active premium subscription
-    const isPremium = candidateProfile.hasActivePremium();
+    const isPremium = candidateProfile.isPremium;
     
     // For non-premium users, check monthly application limit
     if (!isPremium) {
