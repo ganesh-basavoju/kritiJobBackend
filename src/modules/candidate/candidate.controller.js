@@ -72,9 +72,9 @@ exports.uploadResume = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Please upload a file' });
     }
 
-    // Pass buffer to Upload Service (Cloudinary)
+    // Pass buffer to Upload Service (Cloudinary) - use 'raw' for documents (PDF, DOCX)
     const { uploadToCloudinary } = require('../../services/upload.service');
-    const result = await uploadToCloudinary(req.file.buffer, 'resumes');
+    const result = await uploadToCloudinary(req.file.buffer, 'resumes', 'raw', req.file.originalname);
 
     const profile = await CandidateProfile.findOne({ userId: req.user.id });
     

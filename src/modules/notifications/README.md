@@ -307,13 +307,13 @@ logger.error(`Error sending notification: ${error.message}`);
 ### API Testing (Postman/cURL)
 ```bash
 # Register token
-curl -X POST http://localhost:5000/api/notifications/register-token \
+curl -X POST https://kriti-job-backend.vercel.app/api/notifications/register-token \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -d '{"fcmToken":"test-token","platform":"android"}'
 
 # Get notifications
-curl -X GET http://localhost:5000/api/notifications \
+curl -X GET https://kriti-job-backend.vercel.app/api/notifications \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 

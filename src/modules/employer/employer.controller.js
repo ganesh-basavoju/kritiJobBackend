@@ -123,13 +123,19 @@ exports.searchCandidates = async (req, res, next) => {
         _id: 1,
         userId: '$user._id',
         name: '$user.name',
-        avatarUrl: '$user.avatarUrl', // Assuming avatar is on User based on recent changes
+        avatarUrl: '$user.avatarUrl',
         title: 1,
         location: 1,
         skills: 1,
         about: 1,
+        isPremium: 1,
         createdAt: 1
       }
+    });
+
+    // 6. Sort: Premium candidates first, then by creation date
+    pipeline.push({
+      $sort: { isPremium: -1, createdAt: -1 }
     });
 
     // 6. Pagination & Count
@@ -216,6 +222,7 @@ exports.getCandidateById = async (req, res, next) => {
         education: profile.education, // If exists
         resumes: profile.resumes, // Allow viewing resume
         defaultResumeUrl: profile.defaultResumeUrl,
+        isPremium: profile.isPremium || false,
         socialLinks: profile.socialLinks // If exists
       }
     });
