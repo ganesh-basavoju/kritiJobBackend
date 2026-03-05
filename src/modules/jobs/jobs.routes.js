@@ -6,7 +6,7 @@ const { authorize } = require('../../middlewares/rbac.middleware');
 const router = express.Router();
 
 router.get('/', getJobs);
-router.get('/feed', getJobFeed);
+router.get('/feed', authorize('candidate'), getJobFeed);
 router.get('/my-jobs', protect, authorize('employer'), getMyJobs);
 router.get('/:id', getJob);
 
