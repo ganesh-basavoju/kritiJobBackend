@@ -57,7 +57,7 @@ exports.createSubscriptionOrder = async (req, res, next) => {
     const options = {
       amount: plan.amount, // amount in smallest currency unit
       currency: plan.currency,
-      receipt: `sub_${userId}_${Date.now()}`,
+      receipt: `sub_${userId.toString().slice(-8)}_${Date.now()}`,
       notes: {
         candidateId: userId.toString(),
         plan: 'premium',

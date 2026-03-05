@@ -7,7 +7,7 @@ The Kriti Job Portal Backend is a RESTful API built with Node.js, Express, and M
 ## Base URL
 
 ```
-https://kriti-job-backend.vercel.app/api
+http://localhost:5000/api
 ```
 
 ## Tech Stack
@@ -1139,7 +1139,7 @@ You can test the API using tools like:
 
 ```bash
 # Register a user
-curl -X POST https://kriti-job-backend.vercel.app/api/auth/signup \
+curl -X POST http://localhost:5000/api/auth/signup \
   -H "Content-Type: application/json" \
   -d '{
     "name": "John Doe",
@@ -1149,10 +1149,10 @@ curl -X POST https://kriti-job-backend.vercel.app/api/auth/signup \
   }'
 
 # Get all jobs
-curl https://kriti-job-backend.vercel.app/api/jobs
+curl http://localhost:5000/api/jobs
 
 # Get authenticated user (requires token)
-curl https://kriti-job-backend.vercel.app/api/auth/me \
+curl http://localhost:5000/api/auth/me \
   -H "Authorization: Bearer YOUR_JWT_TOKEN"
 ```
 
