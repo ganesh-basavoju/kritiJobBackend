@@ -48,7 +48,15 @@ exports.applyForJob = async (req, res, next) => {
     }
 
     // Check if candidate has active premium subscription
-    const isPremium = candidateProfile.hasActivePremium();
+    // Use || false to ensure we always have a boolean value
+    const isPremium = candidateProfile.isPremium || false;
+    
+    console.log('=== APPLICATION DEBUG ===');
+    console.log('Candidate ID:', req.user.id);
+    console.log('candidateProfile.isPremium:', candidateProfile.isPremium);
+    console.log('isPremium value to be saved:', isPremium);
+    console.log('Type of isPremium:', typeof isPremium);
+    console.log('========================');
     
     // For non-premium users, check monthly application limit
     if (!isPremium) {
@@ -72,6 +80,11 @@ exports.applyForJob = async (req, res, next) => {
       resumeUrl,
       isPremiumApplication: isPremium
     });
+    
+    console.log('=== APPLICATION CREATED ===');
+    console.log('Application ID:', application._id);
+    console.log('isPremiumApplication saved as:', application.isPremiumApplication);
+    console.log('===========================');
 
     // Increment application count
     await candidateProfile.incrementApplicationCount();

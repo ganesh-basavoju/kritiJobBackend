@@ -239,7 +239,8 @@ exports.getSubscriptionStatus = async (req, res, next) => {
           id: activeSubscription._id,
           startDate: activeSubscription.startDate,
           endDate: activeSubscription.endDate,
-          status: activeSubscription.status
+          status: activeSubscription.status,
+          autoRenew: activeSubscription.autoRenew
         } : null
       }
     });
@@ -299,6 +300,13 @@ exports.cancelSubscription = async (req, res, next) => {
       });
     }
 
+    if (!activeSubscription.autoRenew) {
+      return res.status(400).json({
+        success: false,
+        message: 'Auto-renewal is already disabled for this membership'
+      });
+    }
+
     // For now, just disable auto-renewal
     activeSubscription.autoRenew = false;
     await activeSubscription.save();
@@ -317,6 +325,52 @@ exports.cancelSubscription = async (req, res, next) => {
     res.status(500).json({
       success: false,
       message: 'Failed to cancel subscription',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * @desc    Enable auto-renewal for active subscription
+ * @route   POST /api/subscriptions/enable-auto-renew
+ * @access  Private (Candidate only)
+ */
+exports.enableAutoRenewal = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+
+    const activeSubscription = await Subscription.getActiveSubscription(userId);
+    if (!activeSubscription) {
+      return res.status(404).json({
+        success: false,
+        message: 'No active subscription found'
+      });
+    }
+
+    if (activeSubscription.autoRenew) {
+      return res.status(400).json({
+        success: false,
+        message: 'Auto-renewal is already enabled for this membership'
+      });
+    }
+
+    activeSubscription.autoRenew = true;
+    await activeSubscription.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Auto-renewal enabled successfully',
+      data: {
+        subscriptionId: activeSubscription._id,
+        expiresAt: activeSubscription.endDate,
+        autoRenew: activeSubscription.autoRenew
+      }
+    });
+  } catch (error) {
+    console.error('Enable auto-renewal error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to enable auto-renewal',
       error: error.message
     });
   }
