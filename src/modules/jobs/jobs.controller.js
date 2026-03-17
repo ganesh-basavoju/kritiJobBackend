@@ -63,6 +63,8 @@ exports.getJobFeed = async (req, res, next) => {
 // @access  Public
 exports.getJobs = async (req, res, next) => {
   try {
+    console.log('🔍 GET /api/jobs - Query params:', req.query);
+    
     // Filter out inactive jobs for public browsing
     const initialQuery = Job.find({ 
         status: 'Open',
@@ -75,6 +77,8 @@ exports.getJobs = async (req, res, next) => {
 
     // Get total count of matched docs before pagination
     const total = await features.query.clone().countDocuments();
+    
+    console.log('📊 Total matching jobs before pagination:', total);
 
     // Apply pagination and sort
     features.sort()
@@ -82,6 +86,8 @@ exports.getJobs = async (req, res, next) => {
       .paginate();
 
     const jobs = await features.query;
+    
+    console.log('✅ Returning jobs:', jobs.length);
 
     // Calculate pagination
     const page = req.query.page * 1 || 1;
@@ -97,6 +103,7 @@ exports.getJobs = async (req, res, next) => {
       total
     });
   } catch (error) {
+    console.error('❌ GET /api/jobs error:', error);
     next(error);
   }
 };

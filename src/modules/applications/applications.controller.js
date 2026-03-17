@@ -72,6 +72,11 @@ exports.applyForJob = async (req, res, next) => {
       resumeUrl,
       isPremiumApplication: isPremium
     });
+    
+    console.log('=== APPLICATION CREATED ===');
+    console.log('Application ID:', application._id);
+    console.log('isPremiumApplication saved as:', application.isPremiumApplication);
+    console.log('===========================');
 
     // Increment application count
     await candidateProfile.incrementApplicationCount();
