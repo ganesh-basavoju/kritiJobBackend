@@ -22,7 +22,7 @@ const jobSchema = new mongoose.Schema({
   description: {
     type: String,
     required: [true, 'Please add a description'],
-    maxlength: 5000
+    maxlength: 10000
   },
   location: {
     type: String,
@@ -45,9 +45,22 @@ const jobSchema = new mongoose.Schema({
     type: String,
     required: [true, 'Please add a salary range']
   },
+  minSalary: {
+    type: Number,
+    index: true
+  },
+  maxSalary: {
+    type: Number,
+    index: true
+  },
   skillsRequired: {
     type: [String],
     required: true,
+    index: true
+  },
+  isActive: {
+    type: Boolean,
+    default: true,
     index: true
   },
   status: {
@@ -61,8 +74,9 @@ const jobSchema = new mongoose.Schema({
     default: Date.now,
     index: true
   },
-  deadline: {
+  applicationDeadline: {
     type: Date,
+    required: [true, 'Please add an application deadline'],
     index: true
   }
 }, {

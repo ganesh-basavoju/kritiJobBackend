@@ -12,23 +12,87 @@ class APIFeatures {
     // Advanced filtering: salary, etc. (gt, gte, lt, lte)
     let queryStr = JSON.stringify(queryObj);
     queryStr = queryStr.replace(/\b(gte|gt|lte|lt)\b/g, match => `$${match}`);
+    
+    let parsedQuery = JSON.parse(queryStr);
 
-    this.query = this.query.find(JSON.parse(queryStr));
+    // Handle comma-separated fields (Array/Multi-select)
+    // Handle comma-separated fields (Array/Multi-select)
+    ['location', 'type', 'experienceLevel', 'title'].forEach(field => {
+        if (parsedQuery[field] && typeof parsedQuery[field] === 'string' && parsedQuery[field].includes(',')) {
+            const values = parsedQuery[field].split(',');
+            
+            if (field === 'location' || field === 'title') {
+                 // Substring match (User request: %typed% includes)
+                 parsedQuery[field] = { $in: values.map(val => new RegExp(val.trim(), 'i')) };
+            } else {
+                 // Exact match (case-insensitive) for Enums
+                 parsedQuery[field] = { $in: values.map(val => new RegExp(`^${val.trim()}$`, 'i')) };
+            }
+
+        } else if (parsedQuery[field] && typeof parsedQuery[field] === 'string') {
+            // Single value
+            if (field === 'location' || field === 'title') {
+                 parsedQuery[field] = { $regex: parsedQuery[field].trim(), $options: 'i' };
+            } else {
+                 parsedQuery[field] = { $regex: `^${parsedQuery[field].trim()}$`, $options: 'i' };
+            }
+        }
+    });
+
+    // Handle Salary Range (minSalary / maxSalary)
+    // Front sends: minSalary=25000, maxSalary=100000
+    // Logic: Job overlap or fitting?
+    // User wants jobs that pay WITHIN this range or AT LEAST X?
+    // Let's go with: Job's salary range MUST overlap with user's requested range.
+    // Overlap formula: (JobMin <= UserMax) && (JobMax >= UserMin)
+    // BUT we are using simple query params for now.
+    // If User sends minSalary & maxSalary:
+    // We want jobs where:
+    // (job.minSalary >= user.minSalary) AND (job.maxSalary <= user.maxSalary)? No that's too strict (subset).
+    
+    // Let's implement robust Overlap logic if both are present.
+    // User Range: [uMin, uMax]
+    // Job Range: [jMin, jMax]
+    // Overlap: jMin <= uMax AND jMax >= uMin
+    
+    // However, existing simple APIFeatures pattern is direct mapping.
+    // Let's support standard gt/lt query params first. 
+    // If custom logic is needed, we handle it explicitly.
+    
+    // Handle Salary Range Overlap Logic
+    if (parsedQuery.minSalary || parsedQuery.maxSalary) {
+         const userMin = Number(parsedQuery.minSalary) || 0;
+         const userMax = Number(parsedQuery.maxSalary) || Number.MAX_SAFE_INTEGER;
+         
+         // Remove direct minSalary/maxSalary match if they exist in parsedQuery
+         // because we want logic, not exact match
+         delete parsedQuery.minSalary;
+         delete parsedQuery.maxSalary;
+
+         // Overlap Formula: (JobMin <= UserMax) AND (JobMax >= UserMin)
+         parsedQuery.$and = [
+             { minSalary: { $lte: userMax } },
+             { maxSalary: { $gte: userMin } }
+         ];
+    }
+
+    this.query = this.query.find(parsedQuery);
 
     return this;
   }
 
   search(fields = ['title', 'description']) {
     if (this.queryString.keyword) {
-      const keyword = {
-        $or: fields.map(field => ({
-            [field]: {
-                $regex: this.queryString.keyword,
-                $options: 'i'
-            }
-        }))
+      const keywordRegex = {
+          $regex: this.queryString.keyword,
+          $options: 'i'
       };
-      this.query = this.query.find(keyword);
+      
+      const keywordQuery = {
+        $or: fields.map(field => ({ [field]: keywordRegex }))
+      };
+      
+      this.query = this.query.find(keywordQuery);
     }
     return this;
   }

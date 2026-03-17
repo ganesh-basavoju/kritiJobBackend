@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const config = require('../../config/jwt');
 const logger = require('../../config/logger');
 const sendEmail = require('../../services/email.service');
+const notificationService = require('../../services/notification.service');
 
 // Generate Access Token
 const generateAccessToken = (id, role) => {
@@ -59,6 +60,15 @@ exports.register = async (req, res, next) => {
       email,
       password,
       role
+    });
+
+    // Notify Admin
+    await notificationService.sendToAdmin({
+        type: 'NEW_USER',
+        title: 'New User Registered',
+        message: `New ${role} registered: ${name} (${email})`,
+        entityType: 'user',
+        entityId: user._id
     });
 
     sendTokenResponse(user, 201, res);
@@ -149,7 +159,7 @@ exports.getMe = async (req, res, next) => {
   }
 };
 
-// @desc    Forgot Password
+// @desc    Forgot Password (OTP)
 // @route   POST /api/auth/forgot-password
 // @access  Public
 exports.forgotPassword = async (req, res, next) => {
@@ -160,33 +170,35 @@ exports.forgotPassword = async (req, res, next) => {
             return res.status(404).json({ success: false, message: 'There is no user with that email' });
         }
 
-        // Generate token
-        const resetToken = crypto.randomBytes(20).toString('hex');
+        // Generate 6-digit OTP
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-        // Hash and set to resetPasswordToken field
-        user.passwordResetToken = crypto.createHash('sha256').update(resetToken).digest('hex');
-        // Set expire (10 mins)
-        user.passwordResetExpires = Date.now() + 10 * 60 * 1000;
+        // Set OTP and expiration (10 minutes)
+        user.resetPasswordOTP = otp;
+        user.resetPasswordOTPExpire = Date.now() + 10 * 60 * 1000;
 
         await user.save({ validateBeforeSave: false });
 
-        // Create reset url
-        const resetUrl = `${process.env.CLIENT_URL}/reset-password/${resetToken}`;
-
-        const message = `You are receiving this email because you (or someone else) has requested the reset of a password. Please make a PUT request to: \n\n ${resetUrl}`;
+        const message = `Your password reset OTP is: ${otp}\n\nIt is valid for 10 minutes.`;
 
         try {
             await sendEmail({
                 email: user.email,
-                subject: 'Password Reset Token',
+                subject: 'Password Reset OTP',
                 message
             });
 
-            res.status(200).json({ success: true, data: 'Email sent' });
+            // For development/demo purposes (and if email fails), returning OTP in response can help
+            // In strict production, do not return OTP.
+            res.status(200).json({ 
+                success: true, 
+                data: 'Email sent', 
+                otp: process.env.NODE_ENV === 'development' ? otp : undefined 
+            });
         } catch (err) {
             console.error(err);
-            user.passwordResetToken = undefined;
-            user.passwordResetExpires = undefined;
+            user.resetPasswordOTP = undefined;
+            user.resetPasswordOTPExpire = undefined;
             await user.save({ validateBeforeSave: false });
             return res.status(500).json({ success: false, message: 'Email could not be sent' });
         }
@@ -195,27 +207,31 @@ exports.forgotPassword = async (req, res, next) => {
     }
 };
 
-// @desc    Reset Password
-// @route   POST /api/auth/reset-password/:resetToken
+// @desc    Reset Password (Verify OTP)
+// @route   POST /api/auth/reset-password
 // @access  Public
 exports.resetPassword = async (req, res, next) => {
     try {
-        // Get hashed token
-        const resetPasswordToken = crypto.createHash('sha256').update(req.params.resetToken).digest('hex');
+        const { email, otp, password } = req.body;
+
+        if (!email || !otp || !password) {
+             return res.status(400).json({ success: false, message: 'Please provide email, otp and new password' });
+        }
 
         const user = await User.findOne({
-            passwordResetToken: resetPasswordToken,
-            passwordResetExpires: { $gt: Date.now() }
+            email,
+            resetPasswordOTP: otp,
+            resetPasswordOTPExpire: { $gt: Date.now() }
         });
 
         if (!user) {
-            return res.status(400).json({ success: false, message: 'Invalid token' });
+            return res.status(400).json({ success: false, message: 'Invalid OTP or expired' });
         }
 
         // Set new password
-        user.password = req.body.password;
-        user.passwordResetToken = undefined;
-        user.passwordResetExpires = undefined;
+        user.password = password;
+        user.resetPasswordOTP = undefined;
+        user.resetPasswordOTPExpire = undefined;
         await user.save();
 
         sendTokenResponse(user, 200, res);

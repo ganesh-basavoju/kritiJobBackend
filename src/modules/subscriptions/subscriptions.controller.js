@@ -4,11 +4,16 @@ const Subscription = require('../../models/Subscription');
 const CandidateProfile = require('../../models/CandidateProfile');
 const User = require('../../models/User');
 
-// Initialize Razorpay instance
-const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET
-});
+// Initialize Razorpay instance conditionally to avoid crashes if keys are missing
+let razorpay;
+if (process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET) {
+  razorpay = new Razorpay({
+    key_id: process.env.RAZORPAY_KEY_ID,
+    key_secret: process.env.RAZORPAY_KEY_SECRET
+  });
+} else {
+  console.warn('WARNING: Razorpay keys are missing from .env (RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET). Subscription feature will fail.');
+}
 
 // Subscription pricing (in paise for INR, e.g., 29900 = ₹299)
 const SUBSCRIPTION_PLANS = {
@@ -52,13 +57,21 @@ exports.createSubscriptionOrder = async (req, res, next) => {
     const options = {
       amount: plan.amount, // amount in smallest currency unit
       currency: plan.currency,
-      receipt: `sub_${userId}_${Date.now()}`,
+      receipt: `sub_${userId.toString().slice(-8)}_${Date.now()}`,
       notes: {
         candidateId: userId.toString(),
         plan: 'premium',
         duration: plan.duration
       }
     };
+
+    // Create Razorpay order
+    if (!razorpay) {
+      return res.status(500).json({
+        success: false,
+        message: 'Payment gateway is not currently configured on the server.'
+      });
+    }
 
     const order = await razorpay.orders.create(options);
 
@@ -226,7 +239,8 @@ exports.getSubscriptionStatus = async (req, res, next) => {
           id: activeSubscription._id,
           startDate: activeSubscription.startDate,
           endDate: activeSubscription.endDate,
-          status: activeSubscription.status
+          status: activeSubscription.status,
+          autoRenew: activeSubscription.autoRenew
         } : null
       }
     });
@@ -286,6 +300,13 @@ exports.cancelSubscription = async (req, res, next) => {
       });
     }
 
+    if (!activeSubscription.autoRenew) {
+      return res.status(400).json({
+        success: false,
+        message: 'Auto-renewal is already disabled for this membership'
+      });
+    }
+
     // For now, just disable auto-renewal
     activeSubscription.autoRenew = false;
     await activeSubscription.save();
@@ -304,6 +325,52 @@ exports.cancelSubscription = async (req, res, next) => {
     res.status(500).json({
       success: false,
       message: 'Failed to cancel subscription',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * @desc    Enable auto-renewal for active subscription
+ * @route   POST /api/subscriptions/enable-auto-renew
+ * @access  Private (Candidate only)
+ */
+exports.enableAutoRenewal = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+
+    const activeSubscription = await Subscription.getActiveSubscription(userId);
+    if (!activeSubscription) {
+      return res.status(404).json({
+        success: false,
+        message: 'No active subscription found'
+      });
+    }
+
+    if (activeSubscription.autoRenew) {
+      return res.status(400).json({
+        success: false,
+        message: 'Auto-renewal is already enabled for this membership'
+      });
+    }
+
+    activeSubscription.autoRenew = true;
+    await activeSubscription.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Auto-renewal enabled successfully',
+      data: {
+        subscriptionId: activeSubscription._id,
+        expiresAt: activeSubscription.endDate,
+        autoRenew: activeSubscription.autoRenew
+      }
+    });
+  } catch (error) {
+    console.error('Enable auto-renewal error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to enable auto-renewal',
       error: error.message
     });
   }

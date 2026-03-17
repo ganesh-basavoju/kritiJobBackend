@@ -43,15 +43,16 @@ const server = http.createServer(app);
 // Init Socket.io
 const io = socketConfig.init(server);
 
+const notificationHandler = require('./sockets/notification.handler');
+
 io.on('connection', (socket) => {
-  logger.info(`Socket connected: ${socket.id}`);
+  logger.info(`Socket connected: ${socket.id} (User: ${socket.user ? socket.user._id : 'Guest'})`);
   
   // Load socket handlers
   try {
       chatHandler(io, socket);
-      // notificationHandler is for Socket.IO real-time events, not FCM push
-      // If you have a socket notification handler, uncomment it
-      // notificationHandler(io, socket);
+      // Initialize notification handler
+      notificationHandler(io, socket);
   } catch (err) {
       logger.error(`Socket Handler Error: ${err.message}`);
   }

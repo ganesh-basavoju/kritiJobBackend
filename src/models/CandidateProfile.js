@@ -16,7 +16,7 @@ const candidateProfileSchema = new mongoose.Schema({
   location: String,
   about: {
     type: String,
-    maxlength: 1000
+    maxlength: 5000
   },
   skills: {
     type: [String],
