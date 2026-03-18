@@ -41,6 +41,11 @@ const jobSchema = new mongoose.Schema({
     required: true,
     index: true
   },
+  category: {
+    type: String,
+    required: [true, 'Please add a category'],
+    index: true
+  },
   salaryRange: {
     type: String,
     required: [true, 'Please add a salary range']

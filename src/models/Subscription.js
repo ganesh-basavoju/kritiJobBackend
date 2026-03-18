@@ -58,7 +58,7 @@ const subscriptionSchema = new mongoose.Schema({
   // Auto-renewal (for future implementation)
   autoRenew: {
     type: Boolean,
-    default: false
+    default: true
   },
   // Notes
   notes: {
