@@ -5,10 +5,15 @@ const { authorize } = require('../../middlewares/rbac.middleware');
 
 const router = express.Router();
 
+// Public routes
 router.get('/', getJobs);
-router.get('/feed', getJobFeed);
-router.get('/my-jobs', protect, authorize('employer'), getMyJobs);
 router.get('/:id', getJob);
+
+// Protected routes for candidates
+router.get('/feed', protect, authorize('candidate'), getJobFeed);
+
+// Protected routes for employers
+router.get('/my-jobs', protect, authorize('employer'), getMyJobs);
 
 // Protected routes
 router.use(protect);

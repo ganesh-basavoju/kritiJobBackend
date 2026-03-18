@@ -5,7 +5,8 @@ const {
   verifyPayment,
   getSubscriptionStatus,
   getSubscriptionHistory,
-  cancelSubscription
+  cancelSubscription,
+  enableAutoRenewal
 } = require('./subscriptions.controller');
 const { protect } = require('../../middlewares/auth.middleware');
 const { authorize } = require('../../middlewares/rbac.middleware');
@@ -19,5 +20,6 @@ router.post('/verify-payment', verifyPayment);
 router.get('/status', getSubscriptionStatus);
 router.get('/history', getSubscriptionHistory);
 router.post('/cancel', cancelSubscription);
+router.post('/enable-auto-renew', enableAutoRenewal);
 
 module.exports = router;
