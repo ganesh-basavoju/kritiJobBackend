@@ -42,13 +42,10 @@ exports.createSubscriptionOrder = async (req, res, next) => {
       });
     }
 
-    // Get candidate profile
-    const candidateProfile = await CandidateProfile.findOne({ userId });
+    // Ensure candidate profile exists for new users before subscription flow.
+    let candidateProfile = await CandidateProfile.findOne({ userId });
     if (!candidateProfile) {
-      return res.status(404).json({
-        success: false,
-        message: 'Candidate profile not found'
-      });
+      candidateProfile = await CandidateProfile.create({ userId });
     }
 
     const plan = SUBSCRIPTION_PLANS.premium;
@@ -123,6 +120,19 @@ exports.verifyPayment = async (req, res, next) => {
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
     const userId = req.user.id;
 
+    // ✅ NEW: Check for existing active subscription FIRST
+    const existingSubscription = await Subscription.getActiveSubscription(userId);
+    if (existingSubscription) {
+      return res.status(400).json({
+        success: false,
+        message: 'You already have an active premium subscription',
+        data: {
+          existingSubscriptionExpiresAt: existingSubscription.endDate,
+          message: `Your premium access will remain valid until ${existingSubscription.endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+        }
+      });
+    }
+
     // Validate required fields
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
       return res.status(400).json({
@@ -170,15 +180,23 @@ exports.verifyPayment = async (req, res, next) => {
     subscription.razorpaySignature = razorpay_signature;
     subscription.paymentStatus = 'completed';
     subscription.status = 'active';
+    subscription.autoRenew = true; // Enable auto-renewal on successful payment
+    subscription.nextRenewalDate = new Date(subscription.endDate.getTime() - 3 * 24 * 60 * 60 * 1000); // 3 days before expiry
     await subscription.save();
 
-    // Update candidate profile to premium
-    const candidateProfile = await CandidateProfile.findOne({ userId });
-    if (candidateProfile) {
-      candidateProfile.isPremium = true;
-      candidateProfile.subscriptionExpiresAt = subscription.endDate;
-      await candidateProfile.save();
-    }
+    // Update candidate profile to premium (upsert for safety with newly registered users).
+    await CandidateProfile.findOneAndUpdate(
+      { userId },
+      {
+        isPremium: true,
+        subscriptionExpiresAt: subscription.endDate,
+      },
+      {
+        upsert: true,
+        new: true,
+        setDefaultsOnInsert: true,
+      },
+    );
 
     res.status(200).json({
       success: true,
@@ -186,7 +204,8 @@ exports.verifyPayment = async (req, res, next) => {
       data: {
         subscriptionId: subscription._id,
         status: subscription.status,
-        expiresAt: subscription.endDate
+        expiresAt: subscription.endDate,
+        autoRenew: subscription.autoRenew
       }
     });
   } catch (error) {
@@ -210,15 +229,28 @@ exports.getSubscriptionStatus = async (req, res, next) => {
 
     // Get candidate profile
     const candidateProfile = await CandidateProfile.findOne({ userId });
-    if (!candidateProfile) {
-      return res.status(404).json({
-        success: false,
-        message: 'Candidate profile not found'
-      });
-    }
-
     // Get active subscription
     const activeSubscription = await Subscription.getActiveSubscription(userId);
+
+    // New candidates may not have a profile yet. Return default free status.
+    if (!candidateProfile) {
+      return res.status(200).json({
+        success: true,
+        data: {
+          isPremium: false,
+          subscriptionExpiresAt: null,
+          currentMonthApplications: 0,
+          applicationLimit: 10,
+          activeSubscription: activeSubscription ? {
+            id: activeSubscription._id,
+            startDate: activeSubscription.startDate,
+            endDate: activeSubscription.endDate,
+            status: activeSubscription.status,
+            autoRenew: activeSubscription.autoRenew
+          } : null
+        }
+      });
+    }
 
     // Check if subscription is expired
     const isPremium = candidateProfile.hasActivePremium();
@@ -255,24 +287,50 @@ exports.getSubscriptionStatus = async (req, res, next) => {
 };
 
 /**
- * @desc    Get subscription history
- * @route   GET /api/subscriptions/history
+ * @desc    Get subscription history with pagination
+ * @route   GET /api/subscriptions/history?page=1&limit=10
  * @access  Private (Candidate only)
  */
 exports.getSubscriptionHistory = async (req, res, next) => {
   try {
     const userId = req.user.id;
+    
+    // ✅ NEW: Extract pagination params
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(50, parseInt(req.query.limit) || 10); // Max 50 items per page
+    const skip = (page - 1) * limit;
 
-    const subscriptions = await Subscription.find({
-      candidateId: userId,
-      paymentStatus: 'completed'
-    }).sort({ createdAt: -1 });
+    // ✅ NEW: Run two queries in parallel - one for data, one for count
+    const [subscriptions, total] = await Promise.all([
+      Subscription.find({
+        candidateId: userId,
+        paymentStatus: 'completed'
+      })
+        .sort({ createdAt: -1 })
+        .limit(limit)
+        .skip(skip)
+        .lean(), // Use lean() for faster query
+      
+      Subscription.countDocuments({
+        candidateId: userId,
+        paymentStatus: 'completed'
+      })
+    ]);
 
+    // ✅ NEW: Return paginated response
     res.status(200).json({
       success: true,
-      count: subscriptions.length,
-      data: subscriptions
+      data: subscriptions,
+      pagination: {
+        currentPage: page,
+        pageSize: limit,
+        totalRecords: total,
+        totalPages: Math.ceil(total / limit),
+        hasNextPage: page < Math.ceil(total / limit),
+        hasPreviousPage: page > 1
+      }
     });
+
   } catch (error) {
     console.error('Get subscription history error:', error);
     res.status(500).json({
@@ -284,7 +342,7 @@ exports.getSubscriptionHistory = async (req, res, next) => {
 };
 
 /**
- * @desc    Cancel auto-renewal (for future implementation)
+ * @desc    Cancel auto-renewal for current subscription
  * @route   POST /api/subscriptions/cancel
  * @access  Private (Candidate only)
  */
@@ -307,17 +365,42 @@ exports.cancelSubscription = async (req, res, next) => {
       });
     }
 
-    // For now, just disable auto-renewal
+    // ✅ IMPROVED: Update subscription to disable auto-renewal with full tracking
     activeSubscription.autoRenew = false;
+    activeSubscription.cancellationReason = 'user_initiated';
+    activeSubscription.cancelledAt = new Date();
+    activeSubscription.nextRenewalDate = null;
     await activeSubscription.save();
+
+    // ✅ NEW: Send notification to user (non-blocking)
+    try {
+      const notificationService = require('../../services/notification.service');
+      await notificationService.send({
+        recipientId: userId,
+        type: 'SUBSCRIPTION_CANCELLED',
+        title: 'Auto-Renewal Cancelled',
+        message: `Auto-renewal has been disabled. Your premium benefits will be active until ${activeSubscription.endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`,
+        entityType: 'subscription',
+        entityId: activeSubscription._id,
+        data: {
+          subscriptionId: activeSubscription._id.toString(),
+          expiresAt: activeSubscription.endDate
+        }
+      });
+    } catch (notifError) {
+      console.error('Failed to send cancellation notification:', notifError);
+      // Don't fail the request if notification fails
+    }
 
     res.status(200).json({
       success: true,
-      message: 'Auto-renewal disabled. Your subscription will expire on ' + activeSubscription.endDate.toLocaleDateString(),
+      message: 'Auto-renewal cancelled successfully',
       data: {
         subscriptionId: activeSubscription._id,
+        status: activeSubscription.status,
         expiresAt: activeSubscription.endDate,
-        autoRenew: activeSubscription.autoRenew
+        autoRenew: activeSubscription.autoRenew,
+        cancellationMessage: `Your premium subscription will expire on ${activeSubscription.endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
       }
     });
   } catch (error) {
@@ -354,8 +437,34 @@ exports.enableAutoRenewal = async (req, res, next) => {
       });
     }
 
+    // ✅ IMPROVED: Enable auto-renewal and set renewal date
     activeSubscription.autoRenew = true;
+    activeSubscription.cancellationReason = null;
+    activeSubscription.cancelledAt = null;
+    activeSubscription.nextRenewalDate = new Date(activeSubscription.endDate.getTime() - 3 * 24 * 60 * 60 * 1000); // 3 days before expiry
+    activeSubscription.renewalAttempts = 0; // Reset renewal attempts
+    activeSubscription.failureReason = null;
     await activeSubscription.save();
+
+    // ✅ NEW: Send notification to user (non-blocking)
+    try {
+      const notificationService = require('../../services/notification.service');
+      await notificationService.send({
+        recipientId: userId,
+        type: 'SUBSCRIPTION_RENEWED',
+        title: 'Auto-Renewal Enabled',
+        message: 'Auto-renewal has been enabled. Your subscription will be automatically renewed on expiration.',
+        entityType: 'subscription',
+        entityId: activeSubscription._id,
+        data: {
+          subscriptionId: activeSubscription._id.toString(),
+          expiresAt: activeSubscription.endDate
+        }
+      });
+    } catch (notifError) {
+      console.error('Failed to send renewal notification:', notifError);
+      // Don't fail the request if notification fails
+    }
 
     res.status(200).json({
       success: true,
@@ -363,6 +472,7 @@ exports.enableAutoRenewal = async (req, res, next) => {
       data: {
         subscriptionId: activeSubscription._id,
         expiresAt: activeSubscription.endDate,
+        nextRenewalDate: activeSubscription.nextRenewalDate,
         autoRenew: activeSubscription.autoRenew
       }
     });

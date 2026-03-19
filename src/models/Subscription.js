@@ -55,11 +55,62 @@ const subscriptionSchema = new mongoose.Schema({
     default: 'pending',
     index: true
   },
-  // Auto-renewal (for future implementation)
+  // Auto-renewal
   autoRenew: {
     type: Boolean,
-    default: true
+    default: true,
+    index: true
   },
+
+  // Cancellation tracking
+  cancellationReason: {
+    type: String,
+    enum: ['user_initiated', 'payment_failed', 'chargebacks', 'admin_action', null],
+    default: null,
+    sparse: true
+  },
+
+  cancelledAt: {
+    type: Date,
+    sparse: true,
+    index: true
+  },
+
+  // Renewal attempt tracking
+  renewalAttempts: {
+    type: Number,
+    default: 0
+  },
+
+  lastRenewalAttempt: {
+    type: Date,
+    sparse: true,
+    index: true
+  },
+
+  nextRenewalDate: {
+    type: Date,
+    sparse: true,
+    index: true
+  },
+
+  // Failure tracking
+  failureReason: {
+    type: String,
+    sparse: true
+  },
+
+  lastFailureAt: {
+    type: Date,
+    sparse: true
+  },
+
+  // Webhook tracking
+  razorpayWebhookId: {
+    type: String,
+    sparse: true
+  },
+
   // Notes
   notes: {
     type: String
@@ -71,11 +122,46 @@ const subscriptionSchema = new mongoose.Schema({
 // Index for finding active subscriptions
 subscriptionSchema.index({ candidateId: 1, status: 1, endDate: 1 });
 
+// Index for finding subscriptions to renew
+subscriptionSchema.index({ 
+  autoRenew: 1, 
+  status: 1, 
+  nextRenewalDate: 1 
+});
+
 // Method to check if subscription is currently valid
 subscriptionSchema.methods.isValid = function() {
   return this.status === 'active' && 
          this.paymentStatus === 'completed' &&
          this.endDate > new Date();
+};
+
+// Method to mark renewal failed
+subscriptionSchema.methods.recordRenewalFailure = async function(reason) {
+  this.renewalAttempts += 1;
+  this.failureReason = reason;
+  this.lastFailureAt = new Date();
+  
+  // If more than 3 attempts failed, disable auto-renewal
+  if (this.renewalAttempts >= 3) {
+    this.autoRenew = false;
+    this.cancellationReason = 'payment_failed';
+  }
+  
+  await this.save();
+};
+
+// Method to check if subscription needs renewal soon
+subscriptionSchema.methods.needsRenewalSoon = function(daysBeforeExpiry = 3) {
+  if (!this.autoRenew || this.status !== 'active' || this.paymentStatus !== 'completed') {
+    return false;
+  }
+
+  const today = new Date();
+  const renewalThreshold = new Date();
+  renewalThreshold.setDate(renewalThreshold.getDate() + daysBeforeExpiry);
+
+  return this.endDate >= today && this.endDate <= renewalThreshold;
 };
 
 // Static method to get active subscription for a candidate

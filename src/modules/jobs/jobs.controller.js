@@ -4,6 +4,8 @@ const Application = require('../../models/Application');
 const APIFeatures = require('../../utils/apiFeatures');
 const notificationService = require('../../services/notification.service');
 
+const MAX_FREE_JOB_POSTS_PER_MONTH = 10;
+
 
 // @desc    Get job feed (Open jobs, not applied by current user)
 // @route   GET /api/jobs/feed
@@ -160,12 +162,48 @@ exports.createJob = async (req, res, next) => {
     }
 
     // Check for company (Employer must have a company profile to post a job)
+    let company;
     if (!req.body.companyId) {
-        const company = await Company.findOne({ ownerId: req.user.id });
+        company = await Company.findOne({ ownerId: req.user.id });
         if (!company) {
              return res.status(400).json({ success: false, message: 'Please create a company profile first' });
         }
         req.body.companyId = company._id;
+    } else {
+      company = await Company.findOne({ _id: req.body.companyId, ownerId: req.user.id });
+      if (!company && req.user.role !== 'admin') {
+        return res.status(403).json({ success: false, message: 'Not authorized to use this company profile' });
+      }
+      if (!company && req.user.role === 'admin') {
+        company = await Company.findById(req.body.companyId);
+      }
+      if (!company) {
+        return res.status(404).json({ success: false, message: 'Company profile not found' });
+      }
+    }
+
+    // Enforce free-tier monthly posting limit for employers.
+    if (req.user.role === 'employer') {
+      const isPremiumEmployer = company.hasActivePremiumEmployer();
+
+      if (!isPremiumEmployer && company.isPremiumEmployer) {
+        company.isPremiumEmployer = false;
+        company.subscriptionExpiresAt = null;
+        await company.save();
+      }
+
+      if (!isPremiumEmployer) {
+        const currentMonthPosts = company.getCurrentMonthJobPostCount();
+        if (currentMonthPosts >= MAX_FREE_JOB_POSTS_PER_MONTH) {
+          return res.status(403).json({
+            success: false,
+            message: 'You have reached your monthly job posting limit. Upgrade to premium for unlimited job posts.',
+            limit: MAX_FREE_JOB_POSTS_PER_MONTH,
+            current: currentMonthPosts,
+            requiresPremium: true
+          });
+        }
+      }
     }
 
     // Parse salaryRange if provided but min/max are missing
@@ -180,6 +218,10 @@ exports.createJob = async (req, res, next) => {
     }
 
     const job = await Job.create(req.body);
+
+    if (req.user.role === 'employer' && company) {
+      await company.incrementMonthlyJobPostCount();
+    }
 
     // Populate company data for notification
     await job.populate('companyId', 'name logoUrl location');

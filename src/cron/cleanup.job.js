@@ -2,6 +2,7 @@ const cron = require('node-cron');
 const Job = require('../models/Job');
 const logger = require('../config/logger');
 const { checkExpiredSubscriptions } = require('./subscription-expiry.job');
+const { initAutoRenewalJob } = require('./auto-renewal.job');
 
 const runCronJobs = () => {
     // Run every day at midnight
@@ -39,6 +40,9 @@ const runCronJobs = () => {
             logger.error(`Subscription expiry cron error: ${err.message}`);
         }
     });
+
+    // ✅ NEW: Initialize auto-renewal jobs
+    initAutoRenewalJob();
 };
 
 module.exports = runCronJobs;
