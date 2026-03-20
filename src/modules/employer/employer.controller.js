@@ -2,6 +2,7 @@ const User = require('../../models/User');
 const CandidateProfile = require('../../models/CandidateProfile');
 const Job = require('../../models/Job');
 const Application = require('../../models/Application');
+const { getAccessibleRawUrl } = require('../../services/upload.service');
 
 // @desc    Get Employer Statistics
 // @route   GET /api/employer/stats
@@ -204,6 +205,17 @@ exports.getCandidateById = async (req, res, next) => {
     }
 
     // Return public data including resume
+    const resumes = Array.isArray(profile.resumes)
+      ? profile.resumes.map(resume => ({
+          ...resume.toObject(),
+          url: getAccessibleRawUrl(resume.url),
+        }))
+      : [];
+
+    const defaultResumeUrl = profile.defaultResumeUrl
+      ? getAccessibleRawUrl(profile.defaultResumeUrl)
+      : profile.defaultResumeUrl;
+
     res.status(200).json({
       success: true,
       data: {
@@ -220,8 +232,8 @@ exports.getCandidateById = async (req, res, next) => {
         skills: profile.skills,
         experience: profile.experience, // If exists in schema
         education: profile.education, // If exists
-        resumes: profile.resumes, // Allow viewing resume
-        defaultResumeUrl: profile.defaultResumeUrl,
+        resumes,
+        defaultResumeUrl,
         isPremium: profile.isPremium || false,
         socialLinks: profile.socialLinks // If exists
       }

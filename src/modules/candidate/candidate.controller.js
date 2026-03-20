@@ -1,6 +1,7 @@
 const CandidateProfile = require('../../models/CandidateProfile');
 const Job = require('../../models/Job');
 const User = require('../../models/User');
+const { getAccessibleRawUrl } = require('../../services/upload.service');
 
 // @desc    Get current candidate profile
 // @route   GET /api/candidate/profile
@@ -29,6 +30,17 @@ exports.getProfile = async (req, res, next) => {
       profileData.name = profile.userId.name;
       profileData.email = profile.userId.email;
       profileData.phone = profile.phone || profile.userId.phone;
+    }
+
+    if (Array.isArray(profileData.resumes)) {
+      profileData.resumes = profileData.resumes.map(resume => ({
+        ...resume,
+        url: getAccessibleRawUrl(resume.url),
+      }));
+    }
+
+    if (profileData.defaultResumeUrl) {
+      profileData.defaultResumeUrl = getAccessibleRawUrl(profileData.defaultResumeUrl);
     }
 
     res.status(200).json({
@@ -73,26 +85,27 @@ exports.uploadResume = async (req, res, next) => {
     }
 
     // Pass buffer to Upload Service (Cloudinary) - use 'raw' for documents (PDF, DOCX)
-    const { uploadToCloudinary } = require('../../services/upload.service');
+    const { uploadToCloudinary, getAccessibleRawUrl } = require('../../services/upload.service');
     const result = await uploadToCloudinary(req.file.buffer, 'resumes', 'raw', req.file.originalname);
+    const accessibleResumeUrl = getAccessibleRawUrl(result.secure_url) || result.secure_url;
 
     const profile = await CandidateProfile.findOne({ userId: req.user.id });
     
     if (!profile) {
          await CandidateProfile.create({
              userId: req.user.id,
-             resumes: [{ name: req.file.originalname, url: result.secure_url }],
-             defaultResumeUrl: result.secure_url
+           resumes: [{ name: req.file.originalname, url: accessibleResumeUrl }],
+           defaultResumeUrl: accessibleResumeUrl
          });
     } else {
-        profile.resumes.push({ name: req.file.originalname, url: result.secure_url });
-        if (!profile.defaultResumeUrl) profile.defaultResumeUrl = result.secure_url;
+        profile.resumes.push({ name: req.file.originalname, url: accessibleResumeUrl });
+        if (!profile.defaultResumeUrl) profile.defaultResumeUrl = accessibleResumeUrl;
         await profile.save();
     }
 
     res.status(200).json({
       success: true,
-      data: result.secure_url
+      data: accessibleResumeUrl
     });
   } catch (error) {
     next(error);
