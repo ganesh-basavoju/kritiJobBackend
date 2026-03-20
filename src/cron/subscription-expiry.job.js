@@ -8,6 +8,8 @@
 const cron = require('node-cron');
 const Subscription = require('../models/Subscription');
 const CandidateProfile = require('../models/CandidateProfile');
+const Company = require('../models/Company');
+const User = require('../models/User');
 const logger = require('../config/logger');
 
 /**
@@ -32,25 +34,47 @@ async function checkExpiredSubscriptions() {
         subscription.status = 'expired';
         await subscription.save();
 
-        // Update candidate profile
-        const candidateProfile = await CandidateProfile.findOne({ 
-          userId: subscription.candidateId 
-        });
+        const user = await User.findById(subscription.candidateId).select('role');
+        if (!user) {
+          continue;
+        }
 
-        if (candidateProfile && candidateProfile.isPremium) {
-          // Check if there's another active subscription
-          const activeSubscription = await Subscription.getActiveSubscription(
-            subscription.candidateId
-          );
+        const activeSubscription = await Subscription.getActiveSubscription(
+          subscription.candidateId
+        );
 
-          if (!activeSubscription) {
-            // No active subscription found, remove premium status
+        if (activeSubscription) {
+          continue;
+        }
+
+        if (user.role === 'candidate') {
+          const candidateProfile = await CandidateProfile.findOne({
+            userId: subscription.candidateId
+          });
+
+          if (candidateProfile && candidateProfile.isPremium) {
             candidateProfile.isPremium = false;
             candidateProfile.subscriptionExpiresAt = null;
             await candidateProfile.save();
 
             logger.info(
               `Removed premium status for candidate ${subscription.candidateId}`
+            );
+          }
+        }
+
+        if (user.role === 'employer') {
+          const company = await Company.findOne({
+            ownerId: subscription.candidateId
+          });
+
+          if (company && company.isPremiumEmployer) {
+            company.isPremiumEmployer = false;
+            company.subscriptionExpiresAt = null;
+            await company.save();
+
+            logger.info(
+              `Removed premium status for employer ${subscription.candidateId}`
             );
           }
         }

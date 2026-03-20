@@ -15,6 +15,7 @@ const reportRoutes = require('../modules/reports/reports.routes');
 const contentRoutes = require('../modules/content/content.routes');
 const employerRoutes = require('../modules/employer/employer.routes');
 const subscriptionRoutes = require('../modules/subscriptions/subscriptions.routes');
+const employerSubscriptionRoutes = require('../modules/employer-subscriptions/employer-subscriptions.routes');
 
 // Mount Routes
 router.use('/auth', authRoutes);
@@ -30,5 +31,6 @@ router.use('/reports', reportRoutes);
 router.use('/content', contentRoutes);
 router.use('/employer', employerRoutes);
 router.use('/subscriptions', subscriptionRoutes);
+router.use('/employer-subscriptions', employerSubscriptionRoutes);
 
 module.exports = router;
