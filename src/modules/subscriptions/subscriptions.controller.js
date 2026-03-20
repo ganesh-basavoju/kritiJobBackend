@@ -24,6 +24,11 @@ const SUBSCRIPTION_PLANS = {
   }
 };
 
+const getWebBaseUrl = () => {
+  const configured = process.env.PAYMENT_WEB_BASE_URL || process.env.CLIENT_URL || 'http://localhost:5173';
+  return configured.replace(/\/$/, '');
+};
+
 /**
  * @desc    Create Razorpay order for premium subscription
  * @route   POST /api/subscriptions/create-order
@@ -72,6 +77,9 @@ exports.createSubscriptionOrder = async (req, res, next) => {
 
     const order = await razorpay.orders.create(options);
 
+    const authHeader = req.headers.authorization || '';
+    const authToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+
     // Calculate subscription dates
     const startDate = new Date();
     const endDate = new Date();
@@ -90,14 +98,22 @@ exports.createSubscriptionOrder = async (req, res, next) => {
       paymentStatus: 'pending'
     });
 
+    const paymentUrl = new URL(`${getWebBaseUrl()}/payment/checkout`);
+    paymentUrl.searchParams.set('flow', 'candidate');
+    paymentUrl.searchParams.set('orderId', order.id);
+    paymentUrl.searchParams.set('amount', String(plan.amount));
+    paymentUrl.searchParams.set('currency', plan.currency);
+    paymentUrl.searchParams.set('keyId', process.env.RAZORPAY_KEY_ID || '');
+    if (authToken) {
+      paymentUrl.searchParams.set('token', authToken);
+    }
+
     res.status(200).json({
       success: true,
       data: {
+        paymentUrl: paymentUrl.toString(),
         orderId: order.id,
-        amount: plan.amount,
-        currency: plan.currency,
-        subscriptionId: subscription._id,
-        razorpayKeyId: process.env.RAZORPAY_KEY_ID
+        subscriptionId: subscription._id
       }
     });
   } catch (error) {
