@@ -17,11 +17,11 @@ class APIFeatures {
 
     // Handle comma-separated fields (Array/Multi-select)
     // Handle comma-separated fields (Array/Multi-select)
-    ['location', 'type', 'experienceLevel', 'title'].forEach(field => {
+        ['location', 'type', 'experienceLevel', 'category', 'title'].forEach(field => {
         if (parsedQuery[field] && typeof parsedQuery[field] === 'string' && parsedQuery[field].includes(',')) {
             const values = parsedQuery[field].split(',');
             
-            if (field === 'location' || field === 'title') {
+          if (field === 'location' || field === 'title') {
                  // Substring match (User request: %typed% includes)
                  parsedQuery[field] = { $in: values.map(val => new RegExp(val.trim(), 'i')) };
             } else {
@@ -31,7 +31,7 @@ class APIFeatures {
 
         } else if (parsedQuery[field] && typeof parsedQuery[field] === 'string') {
             // Single value
-            if (field === 'location' || field === 'title') {
+          if (field === 'location' || field === 'title') {
                  parsedQuery[field] = { $regex: parsedQuery[field].trim(), $options: 'i' };
             } else {
                  parsedQuery[field] = { $regex: `^${parsedQuery[field].trim()}$`, $options: 'i' };
