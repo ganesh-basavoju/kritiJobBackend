@@ -4,6 +4,7 @@ const User = require('../../models/User');
 const CandidateProfile = require('../../models/CandidateProfile');
 const notificationService = require('../../services/notification.service');
 const sendEmail = require('../../services/email.service');
+const { NOTIFICATION_TYPES } = require('../../constants/notificationTypes');
 
 const MAX_FREE_APPLICATIONS_PER_MONTH = 10;
 
@@ -91,7 +92,7 @@ exports.applyForJob = async (req, res, next) => {
     const candidate = await User.findById(req.user.id).select('name');
     await notificationService.send({
         recipientId: job.employerId,
-        type: 'APPLICATION_RECEIVED',
+      type: NOTIFICATION_TYPES.APPLICATION_RECEIVED,
         title: 'New Job Application',
         message: `${candidate.name} applied for ${job.title}`,
         entityType: 'application',
@@ -101,7 +102,7 @@ exports.applyForJob = async (req, res, next) => {
 
     // Notify Admin
     await notificationService.sendToAdmin({
-        type: 'NEW_APPLICATION',
+      type: NOTIFICATION_TYPES.NEW_APPLICATION,
         title: 'New Job Application',
         message: `New application for ${job.title} from ${candidate.name}`,
         entityType: 'application',
@@ -271,7 +272,7 @@ exports.updateApplicationStatus = async (req, res, next) => {
         
         await notificationService.send({
             recipientId: application.candidateId,
-            type: 'APPLICATION_STATUS_UPDATE',
+          type: NOTIFICATION_TYPES.APPLICATION_STATUS_UPDATE,
             title: 'Application Update',
             message: `Your application for ${job.title} is now ${status}`,
             entityType: 'application',

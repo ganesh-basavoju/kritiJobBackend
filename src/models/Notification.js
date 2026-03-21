@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { NOTIFICATION_TYPES } = require('../constants/notificationTypes');
 
 const notificationSchema = new mongoose.Schema({
   recipient: {
@@ -9,15 +10,7 @@ const notificationSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: [
-      'JOB_APPLIED',
-      'APPLICATION_RECEIVED', 
-      'APPLICATION_STATUS_UPDATE',
-      'JOB_POSTED',
-      'PROFILE_VIEWED',
-      'WELCOME',
-      'GENERAL'
-    ],
+    enum: Object.values(NOTIFICATION_TYPES),
     required: true
   },
   title: {
@@ -32,7 +25,7 @@ const notificationSchema = new mongoose.Schema({
   },
   entityType: {
     type: String,
-    enum: ['job', 'application', 'user', 'company'],
+    enum: ['job', 'application', 'user', 'company', 'subscription'],
     required: false
   },
   entityId: {

@@ -3,6 +3,7 @@ const Company = require('../../models/Company');
 const Application = require('../../models/Application');
 const APIFeatures = require('../../utils/apiFeatures');
 const notificationService = require('../../services/notification.service');
+const { NOTIFICATION_TYPES } = require('../../constants/notificationTypes');
 
 const MAX_FREE_JOB_POSTS_PER_MONTH = 10;
 
@@ -228,7 +229,7 @@ exports.createJob = async (req, res, next) => {
 
     // Notify Admin of new job
     await notificationService.sendToAdmin({
-        type: 'JOB_POSTED',
+      type: NOTIFICATION_TYPES.JOB_POSTED,
         title: 'New Job Posted',
         message: `${req.user.name} posted a new job: ${job.title}`,
         entityType: 'job',

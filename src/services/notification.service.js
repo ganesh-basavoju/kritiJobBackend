@@ -1,5 +1,6 @@
 const Notification = require('../models/Notification');
 const User = require('../models/User');
+const DeviceToken = require('../models/DeviceToken');
 const socketConfig = require('../config/socket');
 const { getMessaging } = require('../config/firebase');
 const logger = require('../config/logger');
@@ -10,6 +11,12 @@ class NotificationService {
    */
   async send({ recipientId, type, title, message, entityType, entityId, data = {}, channels = ['socket', 'fcm'] }) {
     try {
+      if (!recipientId || !type || !title || !message) {
+        throw new Error('Invalid notification payload: recipientId, type, title and message are required');
+      }
+
+      const uniqueChannels = Array.from(new Set(channels));
+
       // 1. Create Notification in Database
       const notification = await Notification.create({
         recipient: recipientId,
@@ -19,23 +26,29 @@ class NotificationService {
         entityType,
         entityId,
         data,
-        deliveryChannels: channels
+        deliveryChannels: uniqueChannels
       });
 
       // 2. Send via Socket.io
-      if (channels.includes('socket')) {
+      if (uniqueChannels.includes('socket')) {
         this.sendToSocket(recipientId, notification);
       }
 
       // 3. Send via FCM (Push Notification)
-      if (channels.includes('fcm')) {
+      if (uniqueChannels.includes('fcm')) {
         this.sendToFCM(recipientId, title, message, data);
       }
       
       return notification;
 
     } catch (error) {
-      logger.error(`NotificationService Error: ${error.message}`);
+      logger.error(`NotificationService Error: ${error.message}`, {
+        recipientId,
+        type,
+        entityType,
+        entityId
+      });
+      return null;
     }
   }
 
@@ -84,9 +97,11 @@ class NotificationService {
 
   async sendToFCM(userId, title, body, data = {}) {
     try {
-      const user = await User.findById(userId).select('fcmTokens');
-      if (!user || !user.fcmTokens || user.fcmTokens.length === 0) {
-        return; 
+      const tokens = await DeviceToken.findActiveTokensForUser(userId);
+      const fcmTokens = tokens.map(tokenDoc => tokenDoc.fcmToken).filter(Boolean);
+
+      if (fcmTokens.length === 0) {
+        return;
       }
 
       const stringData = {};
@@ -97,7 +112,7 @@ class NotificationService {
       const message = {
         notification: { title, body },
         data: stringData,
-        tokens: user.fcmTokens
+        tokens: fcmTokens
       };
 
       const messaging = getMessaging();

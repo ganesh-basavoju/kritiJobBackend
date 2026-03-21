@@ -5,6 +5,7 @@ const config = require('../../config/jwt');
 const logger = require('../../config/logger');
 const sendEmail = require('../../services/email.service');
 const notificationService = require('../../services/notification.service');
+const { NOTIFICATION_TYPES } = require('../../constants/notificationTypes');
 
 // Generate Access Token
 const generateAccessToken = (id, role) => {
@@ -64,7 +65,7 @@ exports.register = async (req, res, next) => {
 
     // Notify Admin
     await notificationService.sendToAdmin({
-        type: 'NEW_USER',
+      type: NOTIFICATION_TYPES.NEW_USER,
         title: 'New User Registered',
         message: `New ${role} registered: ${name} (${email})`,
         entityType: 'user',
@@ -182,17 +183,27 @@ exports.forgotPassword = async (req, res, next) => {
         const message = `Your password reset OTP is: ${otp}\n\nIt is valid for 10 minutes.`;
 
         try {
-            await sendEmail({
+            const emailResult = await sendEmail({
                 email: user.email,
                 subject: 'Password Reset OTP',
                 message
             });
 
+            if (!emailResult?.sent) {
+              return res.status(200).json({
+                success: true,
+                data: 'OTP generated. Email delivery is not configured in this environment.',
+                emailSent: false,
+                otp: process.env.NODE_ENV === 'development' ? otp : undefined
+              });
+            }
+
             // For development/demo purposes (and if email fails), returning OTP in response can help
             // In strict production, do not return OTP.
             res.status(200).json({ 
                 success: true, 
-                data: 'Email sent', 
+              data: 'OTP sent successfully',
+              emailSent: true,
                 otp: process.env.NODE_ENV === 'development' ? otp : undefined 
             });
         } catch (err) {
