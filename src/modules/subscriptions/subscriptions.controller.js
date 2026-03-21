@@ -25,8 +25,7 @@ const SUBSCRIPTION_PLANS = {
 };
 
 const getWebBaseUrl = () => {
-  const configured = "https://kritijob-frontend.vercel.app/";
-  // const configured = process.env.PAYMENT_WEB_BASE_URL || process.env.CLIENT_URL || 'http://localhost:5173';
+  const configured = process.env.CLIENT_URL || 'http://localhost:5173';
   return configured.replace(/\/$/, '');
 };
 
