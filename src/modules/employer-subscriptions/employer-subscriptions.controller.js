@@ -95,6 +95,8 @@ exports.createEmployerSubscriptionOrder = async (req, res) => {
       amount: plan.amount,
       currency: plan.currency,
       paymentStatus: 'pending',
+      autoRenew: false,
+      nextRenewalDate: null,
       notes: 'employer'
     });
 
@@ -171,8 +173,8 @@ exports.verifyEmployerPayment = async (req, res) => {
     subscription.razorpaySignature = razorpay_signature;
     subscription.paymentStatus = 'completed';
     subscription.status = 'active';
-    subscription.autoRenew = true;
-    subscription.nextRenewalDate = new Date(subscription.endDate.getTime() - 3 * 24 * 60 * 60 * 1000);
+    subscription.autoRenew = false;
+    subscription.nextRenewalDate = null;
     await subscription.save();
 
     await Company.findOneAndUpdate(
@@ -311,93 +313,15 @@ exports.getEmployerSubscriptionHistory = async (req, res) => {
 };
 
 exports.cancelEmployerSubscription = async (req, res) => {
-  try {
-    const userId = req.user.id;
-
-    const activeSubscription = await Subscription.getActiveSubscription(userId);
-    if (!activeSubscription) {
-      return res.status(404).json({
-        success: false,
-        message: 'No active subscription found'
-      });
-    }
-
-    if (!activeSubscription.autoRenew) {
-      return res.status(400).json({
-        success: false,
-        message: 'Auto-renewal is already disabled for this membership'
-      });
-    }
-
-    activeSubscription.autoRenew = false;
-    activeSubscription.cancellationReason = 'user_initiated';
-    activeSubscription.cancelledAt = new Date();
-    activeSubscription.nextRenewalDate = null;
-    await activeSubscription.save();
-
-    res.status(200).json({
-      success: true,
-      message: 'Auto-renewal cancelled successfully',
-      data: {
-        subscriptionId: activeSubscription._id,
-        status: activeSubscription.status,
-        expiresAt: activeSubscription.endDate,
-        autoRenew: activeSubscription.autoRenew
-      }
-    });
-  } catch (error) {
-    console.error('Cancel employer subscription error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to cancel employer subscription',
-      error: error.message
-    });
-  }
+  return res.status(410).json({
+    success: false,
+    message: 'Auto-renewal has been discontinued. Premium plans now run for a fixed 30-day duration.'
+  });
 };
 
 exports.enableEmployerAutoRenewal = async (req, res) => {
-  try {
-    const userId = req.user.id;
-
-    const activeSubscription = await Subscription.getActiveSubscription(userId);
-    if (!activeSubscription) {
-      return res.status(404).json({
-        success: false,
-        message: 'No active subscription found'
-      });
-    }
-
-    if (activeSubscription.autoRenew) {
-      return res.status(400).json({
-        success: false,
-        message: 'Auto-renewal is already enabled for this membership'
-      });
-    }
-
-    activeSubscription.autoRenew = true;
-    activeSubscription.cancellationReason = null;
-    activeSubscription.cancelledAt = null;
-    activeSubscription.nextRenewalDate = new Date(activeSubscription.endDate.getTime() - 3 * 24 * 60 * 60 * 1000);
-    activeSubscription.renewalAttempts = 0;
-    activeSubscription.failureReason = null;
-    await activeSubscription.save();
-
-    res.status(200).json({
-      success: true,
-      message: 'Auto-renewal enabled successfully',
-      data: {
-        subscriptionId: activeSubscription._id,
-        expiresAt: activeSubscription.endDate,
-        nextRenewalDate: activeSubscription.nextRenewalDate,
-        autoRenew: activeSubscription.autoRenew
-      }
-    });
-  } catch (error) {
-    console.error('Enable employer auto-renewal error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to enable employer auto-renewal',
-      error: error.message
-    });
-  }
+  return res.status(410).json({
+    success: false,
+    message: 'Auto-renewal has been discontinued. Premium plans now run for a fixed 30-day duration.'
+  });
 };

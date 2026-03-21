@@ -95,7 +95,9 @@ exports.createSubscriptionOrder = async (req, res, next) => {
       razorpayOrderId: order.id,
       amount: plan.amount,
       currency: plan.currency,
-      paymentStatus: 'pending'
+      paymentStatus: 'pending',
+      autoRenew: false,
+      nextRenewalDate: null
     });
 
     const paymentUrl = new URL(`${getWebBaseUrl()}/payment/checkout`);
@@ -196,8 +198,8 @@ exports.verifyPayment = async (req, res, next) => {
     subscription.razorpaySignature = razorpay_signature;
     subscription.paymentStatus = 'completed';
     subscription.status = 'active';
-    subscription.autoRenew = true; // Enable auto-renewal on successful payment
-    subscription.nextRenewalDate = new Date(subscription.endDate.getTime() - 3 * 24 * 60 * 60 * 1000); // 3 days before expiry
+    subscription.autoRenew = false;
+    subscription.nextRenewalDate = null;
     await subscription.save();
 
     // Update candidate profile to premium (upsert for safety with newly registered users).
@@ -363,70 +365,10 @@ exports.getSubscriptionHistory = async (req, res, next) => {
  * @access  Private (Candidate only)
  */
 exports.cancelSubscription = async (req, res, next) => {
-  try {
-    const userId = req.user.id;
-
-    const activeSubscription = await Subscription.getActiveSubscription(userId);
-    if (!activeSubscription) {
-      return res.status(404).json({
-        success: false,
-        message: 'No active subscription found'
-      });
-    }
-
-    if (!activeSubscription.autoRenew) {
-      return res.status(400).json({
-        success: false,
-        message: 'Auto-renewal is already disabled for this membership'
-      });
-    }
-
-    // ✅ IMPROVED: Update subscription to disable auto-renewal with full tracking
-    activeSubscription.autoRenew = false;
-    activeSubscription.cancellationReason = 'user_initiated';
-    activeSubscription.cancelledAt = new Date();
-    activeSubscription.nextRenewalDate = null;
-    await activeSubscription.save();
-
-    // ✅ NEW: Send notification to user (non-blocking)
-    try {
-      const notificationService = require('../../services/notification.service');
-      await notificationService.send({
-        recipientId: userId,
-        type: 'SUBSCRIPTION_CANCELLED',
-        title: 'Auto-Renewal Cancelled',
-        message: `Auto-renewal has been disabled. Your premium benefits will be active until ${activeSubscription.endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`,
-        entityType: 'subscription',
-        entityId: activeSubscription._id,
-        data: {
-          subscriptionId: activeSubscription._id.toString(),
-          expiresAt: activeSubscription.endDate
-        }
-      });
-    } catch (notifError) {
-      console.error('Failed to send cancellation notification:', notifError);
-      // Don't fail the request if notification fails
-    }
-
-    res.status(200).json({
-      success: true,
-      message: 'Auto-renewal cancelled successfully',
-      data: {
-        subscriptionId: activeSubscription._id,
-        status: activeSubscription.status,
-        expiresAt: activeSubscription.endDate,
-        autoRenew: activeSubscription.autoRenew,
-        cancellationMessage: `Your premium subscription will expire on ${activeSubscription.endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
-      }
-    });
-  } catch (error) {
-    console.error('Cancel subscription error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to cancel subscription',
-      error: error.message
-    });
-  }
+  return res.status(410).json({
+    success: false,
+    message: 'Auto-renewal has been discontinued. Premium plans now run for a fixed 30-day duration.'
+  });
 };
 
 /**
@@ -435,69 +377,8 @@ exports.cancelSubscription = async (req, res, next) => {
  * @access  Private (Candidate only)
  */
 exports.enableAutoRenewal = async (req, res, next) => {
-  try {
-    const userId = req.user.id;
-
-    const activeSubscription = await Subscription.getActiveSubscription(userId);
-    if (!activeSubscription) {
-      return res.status(404).json({
-        success: false,
-        message: 'No active subscription found'
-      });
-    }
-
-    if (activeSubscription.autoRenew) {
-      return res.status(400).json({
-        success: false,
-        message: 'Auto-renewal is already enabled for this membership'
-      });
-    }
-
-    // ✅ IMPROVED: Enable auto-renewal and set renewal date
-    activeSubscription.autoRenew = true;
-    activeSubscription.cancellationReason = null;
-    activeSubscription.cancelledAt = null;
-    activeSubscription.nextRenewalDate = new Date(activeSubscription.endDate.getTime() - 3 * 24 * 60 * 60 * 1000); // 3 days before expiry
-    activeSubscription.renewalAttempts = 0; // Reset renewal attempts
-    activeSubscription.failureReason = null;
-    await activeSubscription.save();
-
-    // ✅ NEW: Send notification to user (non-blocking)
-    try {
-      const notificationService = require('../../services/notification.service');
-      await notificationService.send({
-        recipientId: userId,
-        type: 'SUBSCRIPTION_RENEWED',
-        title: 'Auto-Renewal Enabled',
-        message: 'Auto-renewal has been enabled. Your subscription will be automatically renewed on expiration.',
-        entityType: 'subscription',
-        entityId: activeSubscription._id,
-        data: {
-          subscriptionId: activeSubscription._id.toString(),
-          expiresAt: activeSubscription.endDate
-        }
-      });
-    } catch (notifError) {
-      console.error('Failed to send renewal notification:', notifError);
-      // Don't fail the request if notification fails
-    }
-
-    res.status(200).json({
-      success: true,
-      message: 'Auto-renewal enabled successfully',
-      data: {
-        subscriptionId: activeSubscription._id,
-        expiresAt: activeSubscription.endDate,
-        nextRenewalDate: activeSubscription.nextRenewalDate,
-        autoRenew: activeSubscription.autoRenew
-      }
-    });
-  } catch (error) {
-    console.error('Enable auto-renewal error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to enable auto-renewal',
-      error: error.message
-    });
-  }
+  return res.status(410).json({
+    success: false,
+    message: 'Auto-renewal has been discontinued. Premium plans now run for a fixed 30-day duration.'
+  });
 };
