@@ -343,7 +343,8 @@ exports.deleteJob = async (req, res, next) => {
 // @access  Private (Employer)
 exports.getMyJobs = async (req, res, next) => {
     try {
-        const jobs = await Job.find({ employerId: req.user.id });
+    const jobs = await Job.find({ employerId: req.user.id })
+      .populate('companyId', 'name logoUrl location');
 
         res.status(200).json({
             success: true,
